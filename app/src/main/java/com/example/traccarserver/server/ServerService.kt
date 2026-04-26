@@ -12,6 +12,7 @@ import com.example.traccarserver.installer.EnvironmentManager
 import kotlinx.coroutines.*
 import java.io.BufferedReader
 import java.io.File
+import java.io.IOException
 import java.io.InputStreamReader
 
 class ServerService : Service() {
