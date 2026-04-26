@@ -1,0 +1,27 @@
+# Compilados do Java
+*.class
+*.log
+*.jar
+*.war
+
+# Pastas de build (onde o Gradle coloca o que compila)
+build/
+bin/
+out/
+target/
+
+# Gradle
+.gradle/
+/build/
+
+# IDEs (Android Studio, IntelliJ, VS Code)
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# Sistema
+.DS_Store
+Thumbs.db
