@@ -1,45 +1,57 @@
 package com.example.traccarserver.installer
 
 import android.content.Context
+import android.util.Log
 import java.io.File
 import java.io.IOException
 
 class EnvironmentManager(private val context: Context) {
 
+    private val prefs = context.getSharedPreferences("traccar_prefs", Context.MODE_PRIVATE)
     private val baseDir: File = File(context.filesDir, "server")
     val javaDir = File(baseDir, "java")
-    val traccarDir = File(baseDir, "traccar")
     val javaExecutable = File(javaDir, "bin/java")
 
-    fun isInstalled(): Boolean {
-        return javaExecutable.exists() && File(traccarDir, "traccar.jar").exists()
+    var traccarDirPath: String?
+        get() = prefs.getString("traccar_path", null)
+        set(value) = prefs.edit().putString("traccar_path", value).apply()
+
+    fun getTraccarDir(): File? {
+        val path = traccarDirPath ?: return null
+        return File(path)
+    }
+
+    fun isJavaReady(): Boolean {
+        return javaExecutable.exists() && javaExecutable.canExecute()
+    }
+
+    fun isTraccarReady(): Boolean {
+        val dir = getTraccarDir() ?: return false
+        return File(dir, "traccar.jar").exists()
     }
 
     @Throws(IOException::class)
-    fun install(onProgress: (String) -> Unit) {
+    fun ensureJavaInstalled() {
+        if (isJavaReady()) return
+
+        Log.d("EnvironmentManager", "Java não encontrado ou não executável. Iniciando extração silenciosa...")
         val extractor = AssetExtractor(context)
+        
+        if (javaDir.exists()) javaDir.deleteRecursively()
+        javaDir.mkdirs()
 
-        onProgress("Limpando diretórios antigos...")
-        baseDir.deleteRecursively()
-        baseDir.mkdirs()
-
-        onProgress("Extraindo Java 17 (JRE)...")
         extractor.extractTarGz("java17.tar.gz", javaDir)
 
-        onProgress("Extraindo arquivos do Traccar...")
-        extractor.extractZip("traccar.zip", traccarDir)
-
-        onProgress("Configurando permissões do binário Java...")
         if (javaExecutable.exists()) {
             javaExecutable.setExecutable(true, false)
+            Log.d("EnvironmentManager", "Java 17 extraído e configurado com sucesso.")
         } else {
-            throw IOException("Binário Java não encontrado após extração em: ${javaExecutable.absolutePath}")
+            throw IOException("Falha ao localizar binário Java após extração.")
         }
-
-        onProgress("Ambiente instalado com sucesso!")
     }
 
-    fun getTraccarConfigPath(): String {
-        return File(traccarDir, "conf/traccar.xml").absolutePath
+    fun getTraccarConfigPath(): String? {
+        val dir = getTraccarDir() ?: return null
+        return File(dir, "conf/traccar.xml").absolutePath
     }
 }

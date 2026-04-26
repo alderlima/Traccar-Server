@@ -1,22 +1,21 @@
 package com.example.traccarserver
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,6 +62,14 @@ fun AppNavigation() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
+    val directoryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.updateTraccarPath(it.path ?: "")
+        }
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("Traccar Local Server") }) }
     ) { padding ->
@@ -74,28 +81,23 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            StatusCard(viewModel.isInstalled.value, viewModel.isServerRunning.value)
+            StatusCard(viewModel.isTraccarReady.value, viewModel.isServerRunning.value, viewModel.traccarPath.value)
 
             Button(
-                onClick = { viewModel.installEnvironment() },
+                onClick = { directoryLauncher.launch(null) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !viewModel.isInstalling.value && !viewModel.isServerRunning.value
+                enabled = !viewModel.isServerRunning.value
             ) {
-                Icon(Icons.Default.Settings, contentDescription = null)
+                Icon(Icons.Default.Folder, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (viewModel.isInstalled.value) "Reinstalar Ambiente" else "Instalar Ambiente")
-            }
-
-            if (viewModel.isInstalling.value) {
-                CircularProgressIndicator()
-                Text(viewModel.installationLogs.value, fontSize = 12.sp)
+                Text("Selecionar Pasta do Traccar")
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { viewModel.startServer() },
                     modifier = Modifier.weight(1f),
-                    enabled = viewModel.isInstalled.value && !viewModel.isServerRunning.value,
+                    enabled = viewModel.isTraccarReady.value && !viewModel.isServerRunning.value,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
@@ -115,13 +117,13 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
             Divider()
 
             MenuButton(Icons.Default.List, "Ver Logs") { navController.navigate("logs") }
-            MenuButton(Icons.Filled.Public, "Abrir Painel Web") { navController.navigate("web") }
+            MenuButton(Icons.Default.Public, "Abrir Painel Web") { navController.navigate("web") }
         }
     }
 }
 
 @Composable
-fun StatusCard(installed: Boolean, running: Boolean) {
+fun StatusCard(ready: Boolean, running: Boolean, path: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -131,8 +133,9 @@ fun StatusCard(installed: Boolean, running: Boolean) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Status do Sistema", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            StatusRow("Ambiente:", if (installed) "Instalado" else "Não instalado", if (installed) Color(0xFF4CAF50) else Color(0xFFF44336))
-            StatusRow("Servidor:", if (running) "Rodando" else "Parado", if (running) Color(0xFF4CAF50) else Color(0xFFF44336))
+            StatusRow("Pasta:", path, MaterialTheme.colorScheme.onSurfaceVariant)
+            StatusRow("Traccar:", if (ready) "Encontrado" else "Não encontrado", if (ready) Color(0xFF4CAF50) else Color(0xFFF44336))
+            StatusRow("Servidor:", if (running) "Ativo" else "Inativo", if (running) Color(0xFF4CAF50) else Color(0xFFF44336))
         }
     }
 }
@@ -140,8 +143,8 @@ fun StatusCard(installed: Boolean, running: Boolean) {
 @Composable
 fun StatusRow(label: String, value: String, color: Color) {
     Row {
-        Text(label, modifier = Modifier.width(100.dp))
-        Text(value, color = color, style = MaterialTheme.typography.bodyLarge)
+        Text(label, modifier = Modifier.width(80.dp), fontSize = 14.sp)
+        Text(value, color = color, style = MaterialTheme.typography.bodyMedium, fontSize = 14.sp)
     }
 }
 

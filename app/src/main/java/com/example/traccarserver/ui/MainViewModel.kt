@@ -13,13 +13,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-
     private val envManager = EnvironmentManager(application)
     
-    val isInstalled = mutableStateOf(envManager.isInstalled())
     val isServerRunning = mutableStateOf(ServerService.isRunning)
-    val installationLogs = mutableStateOf("")
-    val isInstalling = mutableStateOf(false)
+    val traccarPath = mutableStateOf(envManager.traccarDirPath ?: "Nenhuma pasta selecionada")
+    val isTraccarReady = mutableStateOf(envManager.isTraccarReady())
     val serverLogs = mutableStateListOf<String>()
 
     init {
@@ -31,33 +29,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ServerService.onStatusChanged = { running ->
             isServerRunning.value = running
         }
-    }
-
-    fun installEnvironment() {
-        viewModelScope.launch {
-            isInstalling.value = true
+        
+        // Tenta garantir que o Java esteja pronto em background no início
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                withContext(Dispatchers.IO) {
-                    envManager.install { progress ->
-                        viewModelScope.launch(Dispatchers.Main) {
-                            installationLogs.value = progress
-                        }
-                    }
-                }
-                isInstalled.value = true
+                envManager.ensureJavaInstalled()
             } catch (e: Exception) {
-                installationLogs.value = "Erro: ${e.message}"
-            } finally {
-                isInstalling.value = false
+                withContext(Dispatchers.Main) {
+                    serverLogs.add("Erro crítico: Falha ao preparar Java interno: ${e.message}")
+                }
             }
         }
     }
 
+    fun updateTraccarPath(path: String) {
+        envManager.traccarDirPath = path
+        traccarPath.value = path
+        isTraccarReady.value = envManager.isTraccarReady()
+    }
+
     fun startServer() {
-        val intent = Intent(getApplication(), ServerService::class.java).apply {
-            action = ServerService.ACTION_START
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Garante que o Java esteja lá antes de tentar iniciar o serviço
+                envManager.ensureJavaInstalled()
+                
+                withContext(Dispatchers.Main) {
+                    val intent = Intent(getApplication(), ServerService::class.java).apply {
+                        action = ServerService.ACTION_START
+                    }
+                    getApplication<Application>().startForegroundService(intent)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    serverLogs.add("Erro ao iniciar: ${e.message}")
+                }
+            }
         }
-        getApplication<Application>().startForegroundService(intent)
     }
 
     fun stopServer() {

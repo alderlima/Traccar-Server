@@ -11,6 +11,7 @@ import com.example.traccarserver.MainActivity
 import com.example.traccarserver.installer.EnvironmentManager
 import kotlinx.coroutines.*
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 
 class ServerService : Service() {
@@ -55,8 +56,15 @@ class ServerService : Service() {
         serviceScope.launch {
             try {
                 val javaExec = envManager.javaExecutable.absolutePath
-                val traccarJar = "traccar.jar"
-                val configPath = "conf/traccar.xml"
+                val traccarDir = envManager.getTraccarDir() ?: throw IOException("Diretório do Traccar não selecionado")
+                val traccarJar = File(traccarDir, "traccar.jar").absolutePath
+                val configPath = File(traccarDir, "conf/traccar.xml").absolutePath
+
+                addLog("Iniciando processo Java em: ${traccarDir.absolutePath}")
+                
+                // Garante que a pasta de dados exista para o H2
+                val dataDir = File(traccarDir, "data")
+                if (!dataDir.exists()) dataDir.mkdirs()
 
                 val processBuilder = ProcessBuilder(
                     javaExec,
@@ -68,7 +76,7 @@ class ServerService : Service() {
                     configPath
                 )
                 
-                processBuilder.directory(envManager.traccarDir)
+                processBuilder.directory(traccarDir)
                 processBuilder.redirectErrorStream(true)
 
                 serverProcess = processBuilder.start()
