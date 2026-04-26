@@ -62,6 +62,7 @@ fun AppNavigation() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
+    val context = LocalContext.current
     val directoryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -208,7 +209,7 @@ fun LogsScreen(navController: NavHostController, viewModel: MainViewModel) {
             }
         }
     }
-} 
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
