@@ -58,10 +58,12 @@ class ServerService : Service() {
             try {
                 val javaExec = envManager.javaExecutable.absolutePath
                 val traccarDir = envManager.getTraccarDir() ?: throw IOException("Diretório do Traccar não selecionado")
-                val traccarJar = File(traccarDir, "traccar.jar").absolutePath
+                val jarFile = envManager.getJarFile() ?: throw IOException("Arquivo .jar do Traccar não encontrado")
+                val traccarJar = jarFile.absolutePath
                 val configPath = File(traccarDir, "conf/traccar.xml").absolutePath
 
-                addLog("Iniciando processo Java em: ${traccarDir.absolutePath}")
+                addLog("Iniciando: ${jarFile.name}")
+                addLog("Diretório: ${traccarDir.absolutePath}")
                 
                 // Garante que a pasta de dados exista para o H2
                 val dataDir = File(traccarDir, "data")

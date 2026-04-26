@@ -66,7 +66,14 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         uri?.let {
-            viewModel.updateTraccarPath(it.path ?: "")
+            // Resolve o URI do SAF para o caminho físico real
+            val manager = com.example.traccarserver.installer.EnvironmentManager(context)
+            val realPath = manager.resolveUriToPath(it)
+            if (realPath != null) {
+                viewModel.updateTraccarPath(realPath)
+            } else {
+                viewModel.updateTraccarPath(it.path ?: "")
+            }
         }
     }
 

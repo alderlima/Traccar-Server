@@ -1,6 +1,8 @@
 package com.example.traccarserver.installer
 
 import android.content.Context
+import android.net.Uri
+import android.os.Environment
 import android.util.Log
 import java.io.File
 import java.io.IOException
@@ -21,20 +23,44 @@ class EnvironmentManager(private val context: Context) {
         return File(path)
     }
 
+    // Resolve o URI do SAF para um caminho de arquivo real
+    fun resolveUriToPath(uri: Uri): String? {
+        val uriString = uri.toString()
+        return if (uriString.contains("primary")) {
+            val split = uriString.split("primary:")[1].replace("%2F", "/")
+            Environment.getExternalStorageDirectory().absolutePath + "/" + split
+        } else {
+            // Fallback simples para o caminho do URI se não for primary
+            uri.path?.split(":")?.lastOrNull()?.replace("%2F", "/")?.let {
+                Environment.getExternalStorageDirectory().absolutePath + "/" + it
+            }
+        }
+    }
+
     fun isJavaReady(): Boolean {
         return javaExecutable.exists() && javaExecutable.canExecute()
     }
 
     fun isTraccarReady(): Boolean {
         val dir = getTraccarDir() ?: return false
-        return File(dir, "traccar.jar").exists()
+        // Verifica tanto 'tracker-server.jar' quanto 'traccar.jar' por compatibilidade
+        return File(dir, "tracker-server.jar").exists() || File(dir, "traccar.jar").exists()
+    }
+
+    fun getJarFile(): File? {
+        val dir = getTraccarDir() ?: return null
+        val trackerServer = File(dir, "tracker-server.jar")
+        if (trackerServer.exists()) return trackerServer
+        val traccar = File(dir, "traccar.jar")
+        if (traccar.exists()) return traccar
+        return null
     }
 
     @Throws(IOException::class)
     fun ensureJavaInstalled() {
         if (isJavaReady()) return
 
-        Log.d("EnvironmentManager", "Java não encontrado ou não executável. Iniciando extração silenciosa...")
+        Log.d("EnvironmentManager", "Preparando Java 17 interno...")
         val extractor = AssetExtractor(context)
         
         if (javaDir.exists()) javaDir.deleteRecursively()
@@ -44,14 +70,8 @@ class EnvironmentManager(private val context: Context) {
 
         if (javaExecutable.exists()) {
             javaExecutable.setExecutable(true, false)
-            Log.d("EnvironmentManager", "Java 17 extraído e configurado com sucesso.")
         } else {
-            throw IOException("Falha ao localizar binário Java após extração.")
+            throw IOException("Erro ao configurar binário Java.")
         }
-    }
-
-    fun getTraccarConfigPath(): String? {
-        val dir = getTraccarDir() ?: return null
-        return File(dir, "conf/traccar.xml").absolutePath
     }
 }
