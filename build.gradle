@@ -1,10 +1,13 @@
 buildscript {
+    ext {
+        compose_version = '1.5.0'
+    }
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        // Use a versão 8.2.2 que é estável com o SDK 34 e Java 17
+        // Atualizado para 8.2.2 para melhor compatibilidade com Java 17 e Gradle 8
         classpath 'com.android.tools.build:gradle:8.2.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0"
     }
@@ -16,3 +19,5 @@ allprojects {
         mavenCentral()
     }
 }
+
+// Removida a "task clean" antiga que quebra o build no Gradle moderno
