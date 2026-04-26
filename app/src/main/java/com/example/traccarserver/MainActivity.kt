@@ -110,7 +110,7 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
             Divider()
 
             MenuButton(Icons.Default.List, "Ver Logs") { navController.navigate("logs") }
-            MenuButton(Icons.Default.Public, "Abrir Painel Web") { navController.navigate("web") }
+            MenuButton(Icons.Default.Language, "Abrir Painel Web") { navController.navigate("web") }
         }
     }
 }
