@@ -70,31 +70,22 @@ class ServerService : Service() {
                 val traccarJar = jarFile.absolutePath
                 val configPath = File(traccarDir, "conf/traccar.xml").absolutePath
 
-                addLog("Iniciando Traccar via DalvikVM...")
+                addLog("Iniciando Traccar via Java 17...")
                 addLog("Diretório: ${traccarDir.absolutePath}")
                 
                 // Garante que a pasta de dados exista para o H2
                 val dataDir = File(traccarDir, "data")
                 if (!dataDir.exists()) dataDir.mkdirs()
 
-                // Monta o Classpath com o JAR principal e todas as libs
-                val libDir = File(traccarDir, "lib")
-                val classpath = StringBuilder(traccarJar)
-                if (libDir.exists() && libDir.isDirectory) {
-                    libDir.listFiles { _, name -> name.endsWith(".jar") }?.forEach {
-                        classpath.append(":").append(it.absolutePath)
-                    }
-                }
-
                 // Focamos 100% no Java externo (estilo Termux)
-                // O DalvikVM não consegue ler JARs padrão, por isso foi removido.
                 val javaExec = envManager.javaExecutable.absolutePath
                 
                 if (!envManager.javaExecutable.exists()) {
+                    addLog("ERRO: Java não encontrado em ${javaExec}")
                     throw IOException("Java não instalado. Por favor, realize o download primeiro.")
                 }
 
-                addLog("Iniciando Java 17 (Ambiente Termux)...")
+                addLog("Executando: ${javaExec}")
                 val processBuilder = ProcessBuilder(
                     javaExec,
                     "-Xms128m",

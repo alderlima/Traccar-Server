@@ -68,7 +68,9 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
                     val libJava = File(nativeDir, "libjava_exec.so")
                     
                     Log.d("JavaDownloadWorker", "Aplicando hack de execução nativa...")
-                    envManager.javaExecutable.inputStream().use { input ->
+                    // O binário original está em usr/bin/java (extraído do tar.gz)
+                    val originalJava = File(envManager.binDir, "java")
+                    originalJava.inputStream().use { input ->
                         libJava.outputStream().use { output ->
                             input.copyTo(output)
                         }

@@ -69,8 +69,9 @@ class EnvironmentManager(private val context: Context) {
     }
 
     fun isJavaReady(): Boolean {
-        // Agora usamos o Java nativo do Android (dalvikvm), que sempre está pronto.
-        return true
+        val ready = javaExecutable.exists()
+        Log.d("EnvironmentManager", "Verificando Java em ${javaExecutable.absolutePath}: $ready")
+        return ready
     }
 
     fun isTraccarReady(): Boolean {
