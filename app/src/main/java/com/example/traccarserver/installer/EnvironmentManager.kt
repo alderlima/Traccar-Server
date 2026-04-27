@@ -11,6 +11,9 @@ class EnvironmentManager(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("traccar_prefs", Context.MODE_PRIVATE)
     private val baseDir: File = File(context.filesDir, "server")
+    // No Android 10+, a execução em /data/data/ é restrita. 
+    // Tentamos usar o diretório de arquivos internos, mas se falhar, 
+    // o usuário pode precisar de uma versão que use o diretório de libs nativas.
     val javaDir = File(baseDir, "java")
     val javaExecutable: File
         get() = File(javaDir, "bin/java")

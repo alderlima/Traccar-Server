@@ -97,7 +97,11 @@ class ServerService : Service() {
                 val exitCode = serverProcess?.waitFor()
                 addLog("Servidor parado com código: $exitCode")
             } catch (e: Exception) {
-                addLog("Erro ao iniciar servidor: ${e.message}")
+                val errorMsg = e.message ?: "Erro desconhecido"
+                addLog("Erro ao iniciar servidor: $errorMsg")
+                if (errorMsg.contains("Permission denied")) {
+                    addLog("Dica: Tente reinstalar o Java ou verifique as permissões do app.")
+                }
                 Log.e("ServerService", "Erro no processo", e)
             } finally {
                 isRunning = false

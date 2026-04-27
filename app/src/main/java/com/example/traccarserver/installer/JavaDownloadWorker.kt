@@ -54,9 +54,18 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
             extractFromFile(tempFile, envManager.javaDir)
             
             if (envManager.javaExecutable.exists()) {
+                // Tenta definir permissão de execução via Java API
                 envManager.javaExecutable.setExecutable(true, false)
-                // Também garante que outros binários importantes sejam executáveis
                 File(envManager.javaDir, "bin/keytool").setExecutable(true, false)
+                
+                // Tenta forçar via Shell (mais robusto em alguns dispositivos Android)
+                try {
+                    Runtime.getRuntime().exec("chmod 755 ${envManager.javaExecutable.absolutePath}").waitFor()
+                    val binDir = File(envManager.javaDir, "bin")
+                    Runtime.getRuntime().exec("chmod -R 755 ${binDir.absolutePath}").waitFor()
+                } catch (e: Exception) {
+                    Log.e("JavaDownloadWorker", "Erro ao dar chmod via shell: ${e.message}")
+                }
                 
                 updateStatus("Java instalado com sucesso!")
                 Log.d("JavaDownloadWorker", "Instalação concluída com sucesso.")
