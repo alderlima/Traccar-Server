@@ -10,10 +10,14 @@ import java.io.IOException
 class EnvironmentManager(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("traccar_prefs", Context.MODE_PRIVATE)
-    private val baseDir: File = File(context.filesDir, "server")
-    val traccarDir = File(baseDir, "traccar")
-    val javaDir = File(baseDir, "java")
-    val javaExecutable = File(javaDir, "bin/java")
+    // Estrutura estilo Termux: /data/data/com.example.traccarserver/files/usr/
+    private val usrDir: File = File(context.filesDir, "usr")
+    val binDir = File(usrDir, "bin")
+    val libDir = File(usrDir, "lib")
+    val tmpDir = File(context.cacheDir, "tmp")
+    
+    val javaExecutable = File(binDir, "java")
+    val javaHome = usrDir // No estilo Termux, o prefixo costuma ser o JAVA_HOME
 
     var traccarDirPath: String?
         get() = prefs.getString("traccar_path", null)

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.traccarserver.MainActivity
@@ -20,7 +21,8 @@ class ServerService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var serverProcess: Process? = null
     private lateinit var envManager: EnvironmentManager
-
+    private var wakeLock: PowerManager.WakeLock? = null
+    
     companion object {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
@@ -38,6 +40,10 @@ class ServerService : Service() {
         super.onCreate()
         envManager = EnvironmentManager(this)
         createNotificationChannel()
+        
+        // Configura o WakeLock para manter a CPU ativa com baixo consumo
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TraccarServer::WakeLock")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -50,8 +56,11 @@ class ServerService : Service() {
 
     private fun startServer() {
         if (isRunning) return
+        
+        // Ativa o WakeLock para garantir que o servidor não durma
+        wakeLock?.acquire(10*60*1000L /* 10 minutos ou até o processo terminar */)
 
-        val notification = createNotification("Iniciando servidor Traccar...")
+        val notification = createNotification("Servidor Traccar Ativo")
         startForeground(NOTIFICATION_ID, notification)
 
         serviceScope.launch {
@@ -82,11 +91,11 @@ class ServerService : Service() {
                 val canUseExternalJava = envManager.javaExecutable.exists() && envManager.javaExecutable.canExecute()
 
                 val processBuilder = if (canUseExternalJava) {
-                    addLog("Usando Java externo...")
+                    addLog("Usando Java 17 (Ambiente Termux)...")
                     ProcessBuilder(
                         javaExec,
                         "-Xms128m",
-                        "-Xmx256m",
+                        "-Xmx512m",
                         "-Djava.net.preferIPv4Stack=true",
                         "-jar",
                         traccarJar,
@@ -103,10 +112,14 @@ class ServerService : Service() {
                     )
                 }
                 
+                // Configuração de Ambiente Estilo Termux
                 val env = processBuilder.environment()
-                env["ANDROID_DATA"] = File(filesDir, "android_data").apply { mkdirs() }.absolutePath
+                env["JAVA_HOME"] = envManager.javaHome.absolutePath
+                env["PATH"] = "${envManager.binDir.absolutePath}:/system/bin:/system/xbin"
+                env["LD_LIBRARY_PATH"] = "${envManager.libDir.absolutePath}:${File(envManager.libDir, "server").absolutePath}"
                 env["HOME"] = filesDir.absolutePath
-                env["TMPDIR"] = cacheDir.absolutePath
+                env["TMPDIR"] = envManager.tmpDir.absolutePath
+                env["ANDROID_DATA"] = File(filesDir, "android_data").apply { mkdirs() }.absolutePath
                 
                 processBuilder.directory(traccarDir)
                 processBuilder.redirectErrorStream(true)
@@ -145,6 +158,12 @@ class ServerService : Service() {
         serviceScope.launch {
             serverProcess?.destroy()
             isRunning = false
+            
+            // Libera o WakeLock
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+            
             withContext(Dispatchers.Main) { onStatusChanged?.invoke(false) }
             addLog("Solicitação de parada enviada.")
             delay(1000)

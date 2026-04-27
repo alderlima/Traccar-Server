@@ -47,19 +47,23 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
             downloadFile(JAVA_URL, tempFile)
             
             updateStatus("Extraindo Java...")
-            Log.d("JavaDownloadWorker", "Extraindo para: ${envManager.javaDir.absolutePath}")
-            if (envManager.javaDir.exists()) envManager.javaDir.deleteRecursively()
-            envManager.javaDir.mkdirs()
+            Log.d("JavaDownloadWorker", "Extraindo para: ${envManager.binDir.parentFile?.absolutePath}")
+            val usrDir = envManager.binDir.parentFile
+            if (usrDir?.exists() == true) usrDir.deleteRecursively()
+            envManager.binDir.parentFile?.mkdirs()
+            envManager.binDir.mkdirs()
+            envManager.libDir.mkdirs()
+            envManager.tmpDir.mkdirs()
             
-            extractFromFile(tempFile, envManager.javaDir)
+            // Extrai o Java diretamente para a pasta usr (estilo Termux)
+            extractFromFile(tempFile, envManager.binDir.parentFile!!)
             
             if (envManager.javaExecutable.exists()) {
                 updateStatus("Configurando permissões...")
                 
-                // Tenta garantir permissões de execução em toda a pasta bin
                 try {
-                    val binDir = File(envManager.javaDir, "bin")
-                    Runtime.getRuntime().exec("chmod -R 755 ${binDir.absolutePath}").waitFor()
+                    // Garante permissão de execução no binário java e outros no bin/
+                    Runtime.getRuntime().exec("chmod -R 755 ${envManager.binDir.absolutePath}").waitFor()
                     envManager.javaExecutable.setExecutable(true, false)
                 } catch (e: Exception) {
                     Log.e("JavaDownloadWorker", "Erro ao dar chmod: ${e.message}")
