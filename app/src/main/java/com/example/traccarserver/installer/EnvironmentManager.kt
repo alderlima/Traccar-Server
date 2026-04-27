@@ -11,8 +11,7 @@ class EnvironmentManager(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("traccar_prefs", Context.MODE_PRIVATE)
     private val baseDir: File = File(context.filesDir, "server")
-    val javaDir = File(baseDir, "java")
-    val javaExecutable = File(javaDir, "bin/java")
+    val traccarDir = File(baseDir, "traccar")
 
     var traccarDirPath: String?
         get() = prefs.getString("traccar_path", null)
@@ -57,10 +56,8 @@ class EnvironmentManager(private val context: Context) {
     }
 
     fun isJavaReady(): Boolean {
-        val exists = javaExecutable.exists()
-        val canExec = if (exists) javaExecutable.canExecute() else false
-        Log.d("EnvironmentManager", "Java check: path=${javaExecutable.absolutePath}, exists=$exists, canExecute=$canExec")
-        return exists && canExec
+        // Agora usamos o Java nativo do Android (dalvikvm), que sempre está pronto.
+        return true
     }
 
     fun isTraccarReady(): Boolean {

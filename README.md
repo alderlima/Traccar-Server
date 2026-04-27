@@ -4,7 +4,7 @@ Este projeto é um aplicativo Android completo capaz de rodar um servidor Tracca
 
 ## 🚀 Funcionalidades
 
-*   **Java 17 Dinâmico:** O app pode baixar e instalar o Java 17 automaticamente após a instalação (estilo Termux), reduzindo drasticamente o tamanho do APK.
+*   **Java Nativo (DalvikVM):** O app utiliza o motor Java interno do Android para rodar o Traccar. Isso elimina o erro de "Permission Denied" e reduz o tamanho do APK para o mínimo possível (~2MB).
 *   **Traccar Server:** Roda a versão completa do servidor Traccar.
 *   **Banco de Dados H2:** Configurado para usar H2 localmente em `./data/database`.
 *   **Foreground Service:** O servidor continua rodando em background com uma notificação persistente.
@@ -25,11 +25,11 @@ O app organiza os arquivos no diretório interno:
 3.  Abra o projeto no Android Studio.
 4.  Sincronize o Gradle e execute o build.
 
-### Novo Sistema de Java (Pós-instalação)
-Para reduzir o tamanho do APK de ~60MB para ~5MB, o Java 17 agora pode ser baixado sob demanda:
-- O download é gerenciado pelo `WorkManager` para garantir resiliência.
-- O binário é extraído para o diretório interno do app.
-- A URL de download pode ser configurada em `JavaDownloadWorker.kt`.
+### Novo Sistema de Java Nativo
+O aplicativo não precisa mais baixar um binário Java externo. Ele agora converte o ambiente de execução para usar o `dalvikvm` nativo do Android.
+- **Vantagem:** Zero problemas de permissão.
+- **Vantagem:** Performance otimizada para o hardware do celular.
+- **Vantagem:** APK extremamente pequeno.
 
 ## ⚙️ Configuração do Banco de Dados
 

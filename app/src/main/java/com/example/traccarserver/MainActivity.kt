@@ -109,17 +109,7 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
                 viewModel.isJavaReady.value
             )
 
-            if (!viewModel.isJavaReady.value) {
-                JavaInstallCard(
-                    progress = viewModel.downloadProgress.value,
-                    status = viewModel.downloadStatus.value,
-                    onDownloadClick = { 
-                        if (viewModel.downloadProgress.value == null) {
-                            viewModel.startJavaDownload() 
-                        }
-                    }
-                )
-            }
+            // O Java agora é nativo (DalvikVM), não precisa de download.
 
             Button(
                 onClick = { 

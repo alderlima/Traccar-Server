@@ -56,41 +56,39 @@ class ServerService : Service() {
 
         serviceScope.launch {
             try {
-                val javaExec = envManager.javaExecutable.absolutePath
                 val traccarDir = envManager.getTraccarDir() ?: throw IOException("Diretório do Traccar não selecionado")
                 val jarFile = envManager.getJarFile() ?: throw IOException("Arquivo .jar do Traccar não encontrado")
                 val traccarJar = jarFile.absolutePath
                 val configPath = File(traccarDir, "conf/traccar.xml").absolutePath
 
-                addLog("Iniciando: ${jarFile.name}")
+                addLog("Iniciando Traccar via DalvikVM...")
                 addLog("Diretório: ${traccarDir.absolutePath}")
                 
                 // Garante que a pasta de dados exista para o H2
                 val dataDir = File(traccarDir, "data")
                 if (!dataDir.exists()) dataDir.mkdirs()
 
+                // Monta o Classpath com o JAR principal e todas as libs
+                val libDir = File(traccarDir, "lib")
+                val classpath = StringBuilder(traccarJar)
+                if (libDir.exists() && libDir.isDirectory) {
+                    libDir.listFiles { _, name -> name.endsWith(".jar") }?.forEach {
+                        classpath.append(":").append(it.absolutePath)
+                    }
+                }
+
+                // Usamos o dalvikvm do Android para rodar o Traccar
+                // Isso evita o erro de Permission Denied pois o dalvikvm é um binário do sistema.
                 val processBuilder = ProcessBuilder(
-                    javaExec,
-                    "-Xms128m",
-                    "-Xmx256m",
-                    "-Djava.net.preferIPv4Stack=true",
-                    "-jar",
-                    traccarJar,
+                    "dalvikvm",
+                    "-Xmx512m",
+                    "-cp", classpath.toString(),
+                    "org.traccar.Main",
                     configPath
                 )
                 
-                // Configura variáveis de ambiente essenciais (Estilo Termux)
                 val env = processBuilder.environment()
-                val javaBinDir = File(envManager.javaDir, "bin").absolutePath
-                val javaLibDir = File(envManager.javaDir, "lib").absolutePath
-                val javaServerLibDir = File(envManager.javaDir, "lib/server").absolutePath
-                
-                // Limpa variáveis que podem interferir e define as novas
-                env["JAVA_HOME"] = envManager.javaDir.absolutePath
-                env["PATH"] = "$javaBinDir:/system/bin:/system/xbin"
-                env["LD_LIBRARY_PATH"] = "$javaLibDir:$javaServerLibDir"
-                env["LANG"] = "en_US.UTF-8"
-                env["LC_ALL"] = "en_US.UTF-8"
+                env["ANDROID_DATA"] = File(filesDir, "android_data").apply { mkdirs() }.absolutePath
                 env["HOME"] = filesDir.absolutePath
                 env["TMPDIR"] = cacheDir.absolutePath
                 
