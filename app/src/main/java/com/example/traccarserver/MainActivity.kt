@@ -3,8 +3,10 @@ package com.example.traccarserver
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -32,6 +34,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.traccarserver.installer.EnvironmentManager
 import com.example.traccarserver.ui.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -63,18 +66,28 @@ fun AppNavigation() {
 @Composable
 fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
     val context = LocalContext.current
+    val envManager = remember { EnvironmentManager(context) }
+
     val directoryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        uri?.let {
-            // Resolve o URI do SAF para o caminho físico real
-            val manager = com.example.traccarserver.installer.EnvironmentManager(context)
-            val realPath = manager.resolveUriToPath(it)
-            if (realPath != null) {
-                viewModel.updateTraccarPath(realPath)
-            } else {
-                viewModel.updateTraccarPath(it.path ?: "")
+        try {
+            uri?.let {
+                Log.d("MainActivity", "URI selecionado: $it")
+                val realPath = envManager.resolveUriToPath(it)
+                if (realPath != null) {
+                    viewModel.updateTraccarPath(realPath)
+                    Toast.makeText(context, "Pasta selecionada: $realPath", Toast.LENGTH_SHORT).show()
+                } else {
+                    // Fallback para o path do URI se a resolução falhar
+                    val path = it.path ?: ""
+                    viewModel.updateTraccarPath(path)
+                    Toast.makeText(context, "Aviso: Usando caminho bruto do sistema", Toast.LENGTH_SHORT).show()
+                }
             }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Erro ao processar seleção de pasta: ${e.message}")
+            Toast.makeText(context, "Erro ao selecionar pasta: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -92,7 +105,13 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
             StatusCard(viewModel.isTraccarReady.value, viewModel.isServerRunning.value, viewModel.traccarPath.value)
 
             Button(
-                onClick = { directoryLauncher.launch(null) },
+                onClick = { 
+                    try {
+                        directoryLauncher.launch(null)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Falha ao abrir seletor: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !viewModel.isServerRunning.value
             ) {

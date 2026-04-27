@@ -23,17 +23,36 @@ class EnvironmentManager(private val context: Context) {
         return File(path)
     }
 
-    // Resolve o URI do SAF para um caminho de arquivo real
+    /**
+     * Tenta converter o URI do SAF para um caminho de arquivo absoluto.
+     * Adicionado tratamento de erro para evitar crashes.
+     */
     fun resolveUriToPath(uri: Uri): String? {
-        val uriString = uri.toString()
-        return if (uriString.contains("primary")) {
-            val split = uriString.split("primary:")[1].replace("%2F", "/")
-            Environment.getExternalStorageDirectory().absolutePath + "/" + split
-        } else {
-            // Fallback simples para o caminho do URI se não for primary
-            uri.path?.split(":")?.lastOrNull()?.replace("%2F", "/")?.let {
-                Environment.getExternalStorageDirectory().absolutePath + "/" + it
+        return try {
+            val uriString = uri.toString()
+            Log.d("EnvironmentManager", "Resolvendo URI: $uriString")
+
+            when {
+                uriString.contains("primary:") -> {
+                    val split = uriString.split("primary:")[1].replace("%2F", "/")
+                    File(Environment.getExternalStorageDirectory(), split).absolutePath
+                }
+                uriString.contains("document/raw:") -> {
+                    uriString.split("document/raw:")[1].replace("%2F", "/")
+                }
+                else -> {
+                    // Tenta extrair o ID do documento
+                    val docId = uri.path?.split(":")?.lastOrNull()?.replace("%2F", "/")
+                    if (docId != null) {
+                        File(Environment.getExternalStorageDirectory(), docId).absolutePath
+                    } else {
+                        null
+                    }
+                }
             }
+        } catch (e: Exception) {
+            Log.e("EnvironmentManager", "Erro ao resolver URI: ${e.message}")
+            null
         }
     }
 
@@ -43,16 +62,17 @@ class EnvironmentManager(private val context: Context) {
 
     fun isTraccarReady(): Boolean {
         val dir = getTraccarDir() ?: return false
-        // Verifica tanto 'tracker-server.jar' quanto 'traccar.jar' por compatibilidade
-        return File(dir, "tracker-server.jar").exists() || File(dir, "traccar.jar").exists()
+        return getJarFile() != null
     }
 
     fun getJarFile(): File? {
         val dir = getTraccarDir() ?: return null
-        val trackerServer = File(dir, "tracker-server.jar")
-        if (trackerServer.exists()) return trackerServer
-        val traccar = File(dir, "traccar.jar")
-        if (traccar.exists()) return traccar
+        // Procura pelos nomes comuns do JAR do Traccar
+        val possibleNames = listOf("tracker-server.jar", "traccar-server.jar", "traccar.jar")
+        for (name in possibleNames) {
+            val file = File(dir, name)
+            if (file.exists()) return file
+        }
         return null
     }
 
@@ -60,18 +80,23 @@ class EnvironmentManager(private val context: Context) {
     fun ensureJavaInstalled() {
         if (isJavaReady()) return
 
-        Log.d("EnvironmentManager", "Preparando Java 17 interno...")
+        Log.d("EnvironmentManager", "Extraindo Java 17 interno...")
         val extractor = AssetExtractor(context)
         
         if (javaDir.exists()) javaDir.deleteRecursively()
         javaDir.mkdirs()
 
-        extractor.extractTarGz("java17.tar.gz", javaDir)
-
-        if (javaExecutable.exists()) {
-            javaExecutable.setExecutable(true, false)
-        } else {
-            throw IOException("Erro ao configurar binário Java.")
+        try {
+            extractor.extractTarGz("java17.tar.gz", javaDir)
+            if (javaExecutable.exists()) {
+                javaExecutable.setExecutable(true, false)
+                Log.d("EnvironmentManager", "Java 17 pronto.")
+            } else {
+                throw IOException("Binário java não encontrado após extração.")
+            }
+        } catch (e: Exception) {
+            Log.e("EnvironmentManager", "Falha na instalação do Java: ${e.message}")
+            throw IOException("Falha ao preparar ambiente Java: ${e.message}")
         }
     }
 }
