@@ -4,7 +4,7 @@ Este projeto é um aplicativo Android completo capaz de rodar um servidor Tracca
 
 ## 🚀 Funcionalidades
 
-*   **Java 17 Embutido:** Não depende de Termux ou outras ferramentas externas.
+*   **Java 17 Dinâmico:** O app pode baixar e instalar o Java 17 automaticamente após a instalação (estilo Termux), reduzindo drasticamente o tamanho do APK.
 *   **Traccar Server:** Roda a versão completa do servidor Traccar.
 *   **Banco de Dados H2:** Configurado para usar H2 localmente em `./data/database`.
 *   **Foreground Service:** O servidor continua rodando em background com uma notificação persistente.
@@ -20,9 +20,16 @@ O app organiza os arquivos no diretório interno:
 
 ## 🛠️ Como Buildar
 
-1.  Coloque o `java17.tar.gz` (JRE ARM64) e o `traccar.zip` (arquivos do Traccar) na pasta `app/src/main/assets/`.
-2.  Abra o projeto no Android Studio.
-3.  Sincronize o Gradle e execute o build.
+1.  **Opcional:** Coloque o `java17.tar.gz` (JRE ARM64) na pasta `app/src/main/assets/` se quiser embutir o Java. Se não colocar, o app oferecerá o download automático.
+2.  Coloque o `traccar.zip` (arquivos do Traccar) na pasta `app/src/main/assets/`.
+3.  Abra o projeto no Android Studio.
+4.  Sincronize o Gradle e execute o build.
+
+### Novo Sistema de Java (Pós-instalação)
+Para reduzir o tamanho do APK de ~60MB para ~5MB, o Java 17 agora pode ser baixado sob demanda:
+- O download é gerenciado pelo `WorkManager` para garantir resiliência.
+- O binário é extraído para o diretório interno do app.
+- A URL de download pode ser configurada em `JavaDownloadWorker.kt`.
 
 ## ⚙️ Configuração do Banco de Dados
 

@@ -80,23 +80,30 @@ class EnvironmentManager(private val context: Context) {
     fun ensureJavaInstalled() {
         if (isJavaReady()) return
 
-        Log.d("EnvironmentManager", "Extraindo Java 17 interno...")
-        val extractor = AssetExtractor(context)
-        
-        if (javaDir.exists()) javaDir.deleteRecursively()
-        javaDir.mkdirs()
+        // Tenta extrair dos assets apenas se o arquivo existir
+        val assetExists = try {
+            context.assets.open("java17.tar.gz").close()
+            true
+        } catch (e: IOException) {
+            false
+        }
 
-        try {
-            extractor.extractTarGz("java17.tar.gz", javaDir)
-            if (javaExecutable.exists()) {
-                javaExecutable.setExecutable(true, false)
-                Log.d("EnvironmentManager", "Java 17 pronto.")
-            } else {
-                throw IOException("Binário java não encontrado após extração.")
+        if (assetExists) {
+            Log.d("EnvironmentManager", "Extraindo Java 17 interno...")
+            val extractor = AssetExtractor(context)
+            if (javaDir.exists()) javaDir.deleteRecursively()
+            javaDir.mkdirs()
+            try {
+                extractor.extractTarGz("java17.tar.gz", javaDir)
+                if (javaExecutable.exists()) {
+                    javaExecutable.setExecutable(true, false)
+                    Log.d("EnvironmentManager", "Java 17 pronto.")
+                }
+            } catch (e: Exception) {
+                Log.e("EnvironmentManager", "Falha na extração do Java: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e("EnvironmentManager", "Falha na instalação do Java: ${e.message}")
-            throw IOException("Falha ao preparar ambiente Java: ${e.message}")
+        } else {
+            Log.d("EnvironmentManager", "Java 17 não encontrado nos assets. Necessário download.")
         }
     }
 }

@@ -102,7 +102,20 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            StatusCard(viewModel.isTraccarReady.value, viewModel.isServerRunning.value, viewModel.traccarPath.value)
+            StatusCard(
+                viewModel.isTraccarReady.value,
+                viewModel.isServerRunning.value,
+                viewModel.traccarPath.value,
+                viewModel.isJavaReady.value
+            )
+
+            if (!viewModel.isJavaReady.value) {
+                JavaInstallCard(
+                    progress = viewModel.downloadProgress.value,
+                    status = viewModel.downloadStatus.value,
+                    onDownloadClick = { viewModel.startJavaDownload() }
+                )
+            }
 
             Button(
                 onClick = { 
@@ -150,7 +163,7 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
 }
 
 @Composable
-fun StatusCard(ready: Boolean, running: Boolean, path: String) {
+fun StatusCard(ready: Boolean, running: Boolean, path: String, javaReady: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -161,8 +174,43 @@ fun StatusCard(ready: Boolean, running: Boolean, path: String) {
             Text("Status do Sistema", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             StatusRow("Pasta:", path, MaterialTheme.colorScheme.onSurfaceVariant)
+            StatusRow("Java 17:", if (javaReady) "Instalado" else "Não instalado", if (javaReady) Color(0xFF4CAF50) else Color(0xFFF44336))
             StatusRow("Traccar:", if (ready) "Encontrado" else "Não encontrado", if (ready) Color(0xFF4CAF50) else Color(0xFFF44336))
             StatusRow("Servidor:", if (running) "Ativo" else "Inativo", if (running) Color(0xFF4CAF50) else Color(0xFFF44336))
+        }
+    }
+}
+
+@Composable
+fun JavaInstallCard(progress: Int?, status: String?, onDownloadClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+    ) {
+        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Java 17 Necessário", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "O Java 17 não foi encontrado. Para reduzir o tamanho do app, ele deve ser baixado separadamente.",
+                fontSize = 12.sp,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            
+            if (progress != null || status != null) {
+                status?.let { Text(it, fontSize = 12.sp, color = Color.DarkGray) }
+                progress?.let {
+                    LinearProgressIndicator(
+                        progress = it / 100f,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                    Text("$it%", fontSize = 10.sp)
+                }
+            } else {
+                Button(onClick = onDownloadClick) {
+                    Icon(Icons.Default.Download, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Baixar e Instalar Java 17")
+                }
+            }
         }
     }
 }
