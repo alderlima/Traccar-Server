@@ -84,32 +84,7 @@ class EnvironmentManager(private val context: Context) {
 
     @Throws(IOException::class)
     fun ensureJavaInstalled() {
-        if (isJavaReady()) return
-
-        // Tenta extrair dos assets apenas se o arquivo existir
-        val assetExists = try {
-            context.assets.open("java17.tar.gz").close()
-            true
-        } catch (e: IOException) {
-            false
-        }
-
-        if (assetExists) {
-            Log.d("EnvironmentManager", "Extraindo Java 17 interno...")
-            val extractor = AssetExtractor(context)
-            if (javaDir.exists()) javaDir.deleteRecursively()
-            javaDir.mkdirs()
-            try {
-                extractor.extractTarGz("java17.tar.gz", javaDir)
-                if (javaExecutable.exists()) {
-                    javaExecutable.setExecutable(true, false)
-                    Log.d("EnvironmentManager", "Java 17 pronto.")
-                }
-            } catch (e: Exception) {
-                Log.e("EnvironmentManager", "Falha na extração do Java: ${e.message}")
-            }
-        } else {
-            Log.d("EnvironmentManager", "Java 17 não encontrado nos assets. Necessário download.")
-        }
+        // Agora usamos o Java nativo do Android (dalvikvm) ou o baixado via Worker.
+        // Este método pode ser mantido vazio ou removido se não for mais chamado.
     }
 }
