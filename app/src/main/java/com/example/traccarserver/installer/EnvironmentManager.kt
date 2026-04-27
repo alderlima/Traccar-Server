@@ -12,7 +12,8 @@ class EnvironmentManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("traccar_prefs", Context.MODE_PRIVATE)
     private val baseDir: File = File(context.filesDir, "server")
     val javaDir = File(baseDir, "java")
-    val javaExecutable = File(javaDir, "bin/java")
+    val javaExecutable: File
+        get() = File(javaDir, "bin/java")
 
     var traccarDirPath: String?
         get() = prefs.getString("traccar_path", null)
@@ -57,7 +58,10 @@ class EnvironmentManager(private val context: Context) {
     }
 
     fun isJavaReady(): Boolean {
-        return javaExecutable.exists() && javaExecutable.canExecute()
+        val exists = javaExecutable.exists()
+        val canExec = if (exists) javaExecutable.canExecute() else false
+        Log.d("EnvironmentManager", "Java check: path=${javaExecutable.absolutePath}, exists=$exists, canExecute=$canExec")
+        return exists && canExec
     }
 
     fun isTraccarReady(): Boolean {

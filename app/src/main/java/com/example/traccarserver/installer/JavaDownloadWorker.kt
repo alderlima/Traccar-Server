@@ -18,7 +18,10 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     CoroutineWorker(context, parameters) {
 
     private val envManager = EnvironmentManager(context)
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
+        .build()
 
     companion object {
         const val KEY_PROGRESS = "PROGRESS"
@@ -30,31 +33,40 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
 
     override suspend fun doWork(): Result {
         val notificationId = 2001
-        setForeground(createForegroundInfo("Baixando Java 17...", notificationId))
+        try {
+            setForeground(createForegroundInfo("Baixando Java 17...", notificationId))
+        } catch (e: Exception) {
+            Log.e("JavaDownloadWorker", "Erro ao definir foreground: ${e.message}")
+        }
 
         val tempFile = File(applicationContext.cacheDir, "java17.tar.gz")
         
         try {
             updateStatus("Iniciando download...")
+            Log.d("JavaDownloadWorker", "Baixando de: $JAVA_URL")
             downloadFile(JAVA_URL, tempFile)
             
             updateStatus("Extraindo Java...")
+            Log.d("JavaDownloadWorker", "Extraindo para: ${envManager.javaDir.absolutePath}")
             if (envManager.javaDir.exists()) envManager.javaDir.deleteRecursively()
             envManager.javaDir.mkdirs()
             
-            val extractor = AssetExtractor(applicationContext)
-            // Modificamos o AssetExtractor para aceitar um File em vez de apenas assets
             extractFromFile(tempFile, envManager.javaDir)
             
             if (envManager.javaExecutable.exists()) {
                 envManager.javaExecutable.setExecutable(true, false)
+                // Também garante que outros binários importantes sejam executáveis
+                File(envManager.javaDir, "bin/keytool").setExecutable(true, false)
+                
                 updateStatus("Java instalado com sucesso!")
+                Log.d("JavaDownloadWorker", "Instalação concluída com sucesso.")
                 return Result.success()
             } else {
-                return Result.failure(workDataOf(KEY_STATUS to "Erro: Binário java não encontrado"))
+                Log.e("JavaDownloadWorker", "Binário não encontrado em: ${envManager.javaExecutable.absolutePath}")
+                return Result.failure(workDataOf(KEY_STATUS to "Erro: Binário java não encontrado em ${envManager.javaExecutable.absolutePath}"))
             }
         } catch (e: Exception) {
-            Log.e("JavaDownloadWorker", "Erro: ${e.message}")
+            Log.e("JavaDownloadWorker", "Erro durante o processo: ${e.message}", e)
             return Result.failure(workDataOf(KEY_STATUS to "Erro: ${e.message}"))
         } finally {
             if (tempFile.exists()) tempFile.delete()
@@ -89,21 +101,26 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     }
 
     private fun extractFromFile(file: File, destinationDir: File) {
-        val extractor = AssetExtractor(applicationContext)
-        // Como o AssetExtractor atual usa context.assets.open, vamos precisar de um método que aceite InputStream
-        // Vou adicionar esse método no AssetExtractor.kt
         java.io.FileInputStream(file).use { fis ->
             val gzipIn = org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream(fis)
             val tarIn = org.apache.commons.compress.archivers.tar.TarArchiveInputStream(gzipIn)
             var entry = tarIn.nextTarEntry
             while (entry != null) {
-                val outputFile = File(destinationDir, entry.name)
-                if (entry.isDirectory) {
-                    outputFile.mkdirs()
-                } else {
-                    outputFile.parentFile?.mkdirs()
-                    FileOutputStream(outputFile).use { fos ->
-                        tarIn.copyTo(fos)
+                // Remove o primeiro componente do caminho (ex: jdk-17.0.10+7/)
+                val name = entry.name
+                val parts = name.split("/")
+                if (parts.size > 1) {
+                    val strippedName = parts.drop(1).joinToString("/")
+                    if (strippedName.isNotEmpty()) {
+                        val outputFile = File(destinationDir, strippedName)
+                        if (entry.isDirectory) {
+                            outputFile.mkdirs()
+                        } else {
+                            outputFile.parentFile?.mkdirs()
+                            FileOutputStream(outputFile).use { fos ->
+                                tarIn.copyTo(fos)
+                            }
+                        }
                     }
                 }
                 entry = tarIn.nextTarEntry

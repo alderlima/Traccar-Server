@@ -113,7 +113,11 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
                 JavaInstallCard(
                     progress = viewModel.downloadProgress.value,
                     status = viewModel.downloadStatus.value,
-                    onDownloadClick = { viewModel.startJavaDownload() }
+                    onDownloadClick = { 
+                        if (viewModel.downloadProgress.value == null) {
+                            viewModel.startJavaDownload() 
+                        }
+                    }
                 )
             }
 
