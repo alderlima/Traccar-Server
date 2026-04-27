@@ -12,6 +12,8 @@ class EnvironmentManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("traccar_prefs", Context.MODE_PRIVATE)
     private val baseDir: File = File(context.filesDir, "server")
     val traccarDir = File(baseDir, "traccar")
+    val javaDir = File(baseDir, "java")
+    val javaExecutable = File(javaDir, "bin/java")
 
     var traccarDirPath: String?
         get() = prefs.getString("traccar_path", null)

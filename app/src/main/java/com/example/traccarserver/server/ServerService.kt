@@ -77,15 +77,31 @@ class ServerService : Service() {
                     }
                 }
 
-                // Usamos o dalvikvm do Android para rodar o Traccar
-                // Isso evita o erro de Permission Denied pois o dalvikvm é um binário do sistema.
-                val processBuilder = ProcessBuilder(
-                    "dalvikvm",
-                    "-Xmx512m",
-                    "-cp", classpath.toString(),
-                    "org.traccar.Main",
-                    configPath
-                )
+                // Tenta usar o Java externo se ele existir e for executável
+                val javaExec = envManager.javaExecutable.absolutePath
+                val canUseExternalJava = envManager.javaExecutable.exists() && envManager.javaExecutable.canExecute()
+
+                val processBuilder = if (canUseExternalJava) {
+                    addLog("Usando Java externo...")
+                    ProcessBuilder(
+                        javaExec,
+                        "-Xms128m",
+                        "-Xmx256m",
+                        "-Djava.net.preferIPv4Stack=true",
+                        "-jar",
+                        traccarJar,
+                        configPath
+                    )
+                } else {
+                    addLog("Usando DalvikVM (Nativo)...")
+                    ProcessBuilder(
+                        "dalvikvm",
+                        "-Xmx512m",
+                        "-cp", classpath.toString(),
+                        "org.traccar.Main",
+                        configPath
+                    )
+                }
                 
                 val env = processBuilder.environment()
                 env["ANDROID_DATA"] = File(filesDir, "android_data").apply { mkdirs() }.absolutePath
