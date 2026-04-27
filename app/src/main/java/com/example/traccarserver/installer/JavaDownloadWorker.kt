@@ -54,21 +54,18 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
             extractFromFile(tempFile, envManager.javaDir)
             
             if (envManager.javaExecutable.exists()) {
-                // Tenta definir permissão de execução via Java API
-                envManager.javaExecutable.setExecutable(true, false)
-                File(envManager.javaDir, "bin/keytool").setExecutable(true, false)
+                updateStatus("Configurando permissões...")
                 
-                // Tenta forçar via Shell (mais robusto em alguns dispositivos Android)
+                // Tenta garantir permissões de execução em toda a pasta bin
                 try {
-                    Runtime.getRuntime().exec("chmod 755 ${envManager.javaExecutable.absolutePath}").waitFor()
                     val binDir = File(envManager.javaDir, "bin")
                     Runtime.getRuntime().exec("chmod -R 755 ${binDir.absolutePath}").waitFor()
+                    envManager.javaExecutable.setExecutable(true, false)
                 } catch (e: Exception) {
-                    Log.e("JavaDownloadWorker", "Erro ao dar chmod via shell: ${e.message}")
+                    Log.e("JavaDownloadWorker", "Erro ao dar chmod: ${e.message}")
                 }
                 
                 updateStatus("Java instalado com sucesso!")
-                Log.d("JavaDownloadWorker", "Instalação concluída com sucesso.")
                 return Result.success()
             } else {
                 Log.e("JavaDownloadWorker", "Binário não encontrado em: ${envManager.javaExecutable.absolutePath}")
@@ -110,12 +107,36 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     }
 
     private fun extractFromFile(file: File, destinationDir: File) {
+        Log.d("JavaDownloadWorker", "Extraindo via comando shell tar...")
+        
+        // No Android, o comando tar está disponível via toybox/busybox
+        // Usamos o comando shell para garantir que as permissões de execução e links simbólicos sejam preservados
+        // --strip-components=1 remove a pasta raiz (ex: jdk-17.0.10+7/)
+        val command = "tar -xzf ${file.absolutePath} -C ${destinationDir.absolutePath} --strip-components=1"
+        
+        try {
+            val process = Runtime.getRuntime().exec(command)
+            val exitCode = process.waitFor()
+            
+            if (exitCode != 0) {
+                val error = process.errorStream.bufferedReader().readText()
+                Log.e("JavaDownloadWorker", "Erro no tar (code $exitCode): $error")
+                
+                // Fallback para extração manual se o tar falhar (embora o tar seja o ideal para permissões)
+                extractManual(file, destinationDir)
+            }
+        } catch (e: Exception) {
+            Log.e("JavaDownloadWorker", "Falha ao executar comando tar: ${e.message}")
+            extractManual(file, destinationDir)
+        }
+    }
+
+    private fun extractManual(file: File, destinationDir: File) {
         java.io.FileInputStream(file).use { fis ->
             val gzipIn = org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream(fis)
             val tarIn = org.apache.commons.compress.archivers.tar.TarArchiveInputStream(gzipIn)
             var entry = tarIn.nextTarEntry
             while (entry != null) {
-                // Remove o primeiro componente do caminho (ex: jdk-17.0.10+7/)
                 val name = entry.name
                 val parts = name.split("/")
                 if (parts.size > 1) {

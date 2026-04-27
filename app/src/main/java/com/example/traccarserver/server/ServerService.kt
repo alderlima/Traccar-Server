@@ -79,6 +79,21 @@ class ServerService : Service() {
                     configPath
                 )
                 
+                // Configura variáveis de ambiente essenciais (Estilo Termux)
+                val env = processBuilder.environment()
+                val javaBinDir = File(envManager.javaDir, "bin").absolutePath
+                val javaLibDir = File(envManager.javaDir, "lib").absolutePath
+                val javaServerLibDir = File(envManager.javaDir, "lib/server").absolutePath
+                
+                // Limpa variáveis que podem interferir e define as novas
+                env["JAVA_HOME"] = envManager.javaDir.absolutePath
+                env["PATH"] = "$javaBinDir:/system/bin:/system/xbin"
+                env["LD_LIBRARY_PATH"] = "$javaLibDir:$javaServerLibDir"
+                env["LANG"] = "en_US.UTF-8"
+                env["LC_ALL"] = "en_US.UTF-8"
+                env["HOME"] = filesDir.absolutePath
+                env["TMPDIR"] = cacheDir.absolutePath
+                
                 processBuilder.directory(traccarDir)
                 processBuilder.redirectErrorStream(true)
 
