@@ -86,31 +86,24 @@ class ServerService : Service() {
                     }
                 }
 
-                // Tenta usar o Java externo se ele existir e for executável
+                // Focamos 100% no Java externo (estilo Termux)
+                // O DalvikVM não consegue ler JARs padrão, por isso foi removido.
                 val javaExec = envManager.javaExecutable.absolutePath
-                val canUseExternalJava = envManager.javaExecutable.exists() && envManager.javaExecutable.canExecute()
-
-                val processBuilder = if (canUseExternalJava) {
-                    addLog("Usando Java 17 (Ambiente Termux)...")
-                    ProcessBuilder(
-                        javaExec,
-                        "-Xms128m",
-                        "-Xmx512m",
-                        "-Djava.net.preferIPv4Stack=true",
-                        "-jar",
-                        traccarJar,
-                        configPath
-                    )
-                } else {
-                    addLog("Usando DalvikVM (Nativo)...")
-                    ProcessBuilder(
-                        "dalvikvm",
-                        "-Xmx512m",
-                        "-cp", classpath.toString(),
-                        "org.traccar.Main",
-                        configPath
-                    )
+                
+                if (!envManager.javaExecutable.exists()) {
+                    throw IOException("Java não instalado. Por favor, realize o download primeiro.")
                 }
+
+                addLog("Iniciando Java 17 (Ambiente Termux)...")
+                val processBuilder = ProcessBuilder(
+                    javaExec,
+                    "-Xms128m",
+                    "-Xmx512m",
+                    "-Djava.net.preferIPv4Stack=true",
+                    "-jar",
+                    traccarJar,
+                    configPath
+                )
                 
                 // Configuração de Ambiente Estilo Termux
                 val env = processBuilder.environment()

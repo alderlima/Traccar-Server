@@ -62,11 +62,30 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
                 updateStatus("Configurando permissões...")
                 
                 try {
-                    // Garante permissão de execução no binário java e outros no bin/
+                    // O HACK DEFINITIVO: Copiar o binário para o diretório de libs nativas do Android
+                    // O Android permite execução nesta pasta se o arquivo tiver prefixo 'lib' e extensão '.so'
+                    val nativeDir = File(applicationContext.applicationInfo.nativeLibraryDir)
+                    val libJava = File(nativeDir, "libjava_exec.so")
+                    
+                    Log.d("JavaDownloadWorker", "Aplicando hack de execução nativa...")
+                    envManager.javaExecutable.inputStream().use { input ->
+                        libJava.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    
+                    // Dá permissão de execução no arquivo "disfarçado" e no original
+                    Runtime.getRuntime().exec("chmod 755 ${libJava.absolutePath}").waitFor()
                     Runtime.getRuntime().exec("chmod -R 755 ${envManager.binDir.absolutePath}").waitFor()
+                    
+                    libJava.setExecutable(true, false)
                     envManager.javaExecutable.setExecutable(true, false)
+                    
+                    Log.d("JavaDownloadWorker", "Hack aplicado em: ${libJava.absolutePath}")
                 } catch (e: Exception) {
-                    Log.e("JavaDownloadWorker", "Erro ao dar chmod: ${e.message}")
+                    Log.e("JavaDownloadWorker", "Erro ao aplicar hack de permissão: ${e.message}")
+                    // Fallback apenas para o chmod original
+                    Runtime.getRuntime().exec("chmod -R 755 ${envManager.binDir.absolutePath}").waitFor()
                 }
                 
                 updateStatus("Java instalado com sucesso!")

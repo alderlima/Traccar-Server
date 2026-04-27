@@ -16,8 +16,15 @@ class EnvironmentManager(private val context: Context) {
     val libDir = File(usrDir, "lib")
     val tmpDir = File(context.cacheDir, "tmp")
     
-    val javaExecutable = File(binDir, "java")
     val javaHome = usrDir // No estilo Termux, o prefixo costuma ser o JAVA_HOME
+    
+    val javaExecutable: File
+        get() {
+            // O HACK: Tenta usar o binário disfarçado de biblioteca nativa para pular o erro 13
+            val nativeDir = File(context.applicationInfo.nativeLibraryDir)
+            val libJava = File(nativeDir, "libjava_exec.so")
+            return if (libJava.exists()) libJava else File(binDir, "java")
+        }
 
     var traccarDirPath: String?
         get() = prefs.getString("traccar_path", null)
