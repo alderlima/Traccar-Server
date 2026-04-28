@@ -8,7 +8,7 @@ Este documento fornece instruções detalhadas para configurar seu ambiente de d
 - **Java Development Kit (JDK)**: Versão 21 ou superior
 - **Android Studio**: Versão 2024.1 ou superior (recomendado)
 - **Android SDK**: API 35 (compileSdk)
-- **Gradle**: 8.6 ou superior (incluído no projeto)
+- **Gradle**: 8.7 ou superior (incluído no projeto)
 
 ## 🛠️ Instalação do JDK 21
 
