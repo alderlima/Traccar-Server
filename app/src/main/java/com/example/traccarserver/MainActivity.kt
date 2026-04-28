@@ -67,32 +67,29 @@ fun AppNavigation() {
 fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
     val context = LocalContext.current
     val envManager = remember { EnvironmentManager(context) }
+    val isJavaReady by viewModel.isJavaReady.collectAsState()
+    val isServerRunning by viewModel.isServerRunning.collectAsState()
+    val isTraccarReady by viewModel.isTraccarReady.collectAsState()
+    val traccarPath by viewModel.traccarPath.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val downloadStatus by viewModel.downloadStatus.collectAsState()
 
     val directoryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        try {
-            uri?.let {
-                Log.d("MainActivity", "URI selecionado: $it")
-                val realPath = envManager.resolveUriToPath(it)
-                if (realPath != null) {
-                    viewModel.updateTraccarPath(realPath)
-                    Toast.makeText(context, "Pasta selecionada: $realPath", Toast.LENGTH_SHORT).show()
-                } else {
-                    // Fallback para o path do URI se a resolução falhar
-                    val path = it.path ?: ""
-                    viewModel.updateTraccarPath(path)
-                    Toast.makeText(context, "Aviso: Usando caminho bruto do sistema", Toast.LENGTH_SHORT).show()
-                }
+        uri?.let {
+            val realPath = envManager.resolveUriToPath(it)
+            if (realPath != null) {
+                viewModel.updateTraccarPath(realPath)
+                Toast.makeText(context, "Pasta selecionada: $realPath", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Erro ao resolver caminho da pasta", Toast.LENGTH_LONG).show()
             }
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Erro ao processar seleção de pasta: ${e.message}")
-            Toast.makeText(context, "Erro ao selecionar pasta: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Traccar Local Server") }) }
+        topBar = { TopAppBar(title = { Text("Traccar Server (Termux-Style)") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -103,34 +100,24 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             StatusCard(
-                viewModel.isTraccarReady.value,
-                viewModel.isServerRunning.value,
-                viewModel.traccarPath.value,
-                viewModel.isJavaReady.value
+                isTraccarReady,
+                isServerRunning,
+                traccarPath ?: "Não selecionada",
+                isJavaReady
             )
 
-            if (!viewModel.isJavaReady.value) {
+            if (!isJavaReady) {
                 JavaInstallCard(
-                    progress = viewModel.downloadProgress.value,
-                    status = viewModel.downloadStatus.value,
-                    onDownloadClick = { 
-                        if (viewModel.downloadProgress.value == null) {
-                            viewModel.startJavaDownload() 
-                        }
-                    }
+                    progress = downloadProgress,
+                    status = downloadStatus,
+                    onDownloadClick = { viewModel.startJavaDownload() }
                 )
             }
 
             Button(
-                onClick = { 
-                    try {
-                        directoryLauncher.launch(null)
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Falha ao abrir seletor: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                },
+                onClick = { directoryLauncher.launch(null) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !viewModel.isServerRunning.value
+                enabled = !isServerRunning
             ) {
                 Icon(Icons.Default.Folder, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -141,7 +128,7 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
                 Button(
                     onClick = { viewModel.startServer() },
                     modifier = Modifier.weight(1f),
-                    enabled = viewModel.isTraccarReady.value && !viewModel.isServerRunning.value,
+                    enabled = isTraccarReady && isJavaReady && !isServerRunning,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
@@ -150,7 +137,7 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
                 Button(
                     onClick = { viewModel.stopServer() },
                     modifier = Modifier.weight(1f),
-                    enabled = viewModel.isServerRunning.value,
+                    enabled = isServerRunning,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))
                 ) {
                     Icon(Icons.Default.Close, contentDescription = null)
@@ -178,7 +165,7 @@ fun StatusCard(ready: Boolean, running: Boolean, path: String, javaReady: Boolea
             Text("Status do Sistema", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             StatusRow("Pasta:", path, MaterialTheme.colorScheme.onSurfaceVariant)
-            StatusRow("Java 17:", if (javaReady) "Instalado" else "Não instalado", if (javaReady) Color(0xFF4CAF50) else Color(0xFFF44336))
+            StatusRow("Java 17:", if (javaReady) "Pronto (Termux)" else "Não instalado", if (javaReady) Color(0xFF4CAF50) else Color(0xFFF44336))
             StatusRow("Traccar:", if (ready) "Encontrado" else "Não encontrado", if (ready) Color(0xFF4CAF50) else Color(0xFFF44336))
             StatusRow("Servidor:", if (running) "Ativo" else "Inativo", if (running) Color(0xFF4CAF50) else Color(0xFFF44336))
         }
@@ -192,27 +179,25 @@ fun JavaInstallCard(progress: Int?, status: String?, onDownloadClick: () -> Unit
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
     ) {
         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Java 17 Necessário", style = MaterialTheme.typography.titleSmall)
+            Text("Ambiente Termux Necessário", style = MaterialTheme.typography.titleSmall)
             Text(
-                "O Java 17 não foi encontrado. Para reduzir o tamanho do app, ele deve ser baixado separadamente.",
+                "O ambiente Java 17 estilo Termux precisa ser preparado para rodar o servidor com segurança.",
                 fontSize = 12.sp,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
             
-            if (progress != null || status != null) {
+            if (progress != null && progress > 0) {
                 status?.let { Text(it, fontSize = 12.sp, color = Color.DarkGray) }
-                progress?.let {
-                    LinearProgressIndicator(
-                        progress = it / 100f,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    )
-                    Text("$it%", fontSize = 10.sp)
-                }
+                LinearProgressIndicator(
+                    progress = progress / 100f,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+                Text("$progress%", fontSize = 10.sp)
             } else {
                 Button(onClick = onDownloadClick) {
                     Icon(Icons.Default.Download, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Baixar e Instalar Java 17")
+                    Text("Instalar Ambiente Java 17")
                 }
             }
         }
@@ -242,18 +227,19 @@ fun MenuButton(icon: ImageVector, label: String, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogsScreen(navController: NavHostController, viewModel: MainViewModel) {
+    val logs by viewModel.serverLogs.collectAsState()
     val listState = rememberLazyListState()
     
-    LaunchedEffect(viewModel.serverLogs.size) {
-        if (viewModel.serverLogs.isNotEmpty()) {
-            listState.animateScrollToItem(viewModel.serverLogs.size - 1)
+    LaunchedEffect(logs.size) {
+        if (logs.isNotEmpty()) {
+            listState.animateScrollToItem(logs.size - 1)
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Logs do Servidor") },
+                title = { Text("Logs do Terminal") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
@@ -270,7 +256,7 @@ fun LogsScreen(navController: NavHostController, viewModel: MainViewModel) {
                 .background(Color.Black)
                 .padding(8.dp)
         ) {
-            items(viewModel.serverLogs) { log ->
+            items(logs) { log ->
                 Text(
                     text = log,
                     color = Color.Green,

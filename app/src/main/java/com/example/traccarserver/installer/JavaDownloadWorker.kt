@@ -20,21 +20,20 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     private val envManager = EnvironmentManager(context)
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
+        .readTimeout(15, java.util.concurrent.TimeUnit.MINUTES)
         .build()
 
     companion object {
         const val KEY_PROGRESS = "PROGRESS"
         const val KEY_STATUS = "STATUS"
-        // URL para o Java 17 (OpenJDK) para Android/Linux aarch64 (exemplo do Termux/Adoptium)
-        // Nota: O usuário deve fornecer uma URL válida para o tar.gz compatível com Android
+        // URL para o Java 17 (OpenJDK) para Android/Linux aarch64
         const val JAVA_URL = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.10%2B7/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.10_7.tar.gz"
     }
 
     override suspend fun doWork(): Result {
         val notificationId = 2001
         try {
-            setForeground(createForegroundInfo("Baixando Java 17...", notificationId))
+            setForeground(createForegroundInfo("Preparando ambiente Termux...", notificationId))
         } catch (e: Exception) {
             Log.e("JavaDownloadWorker", "Erro ao definir foreground: ${e.message}")
         }
@@ -42,62 +41,30 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
         val tempFile = File(applicationContext.cacheDir, "java17.tar.gz")
         
         try {
-            updateStatus("Iniciando download...")
-            Log.d("JavaDownloadWorker", "Baixando de: $JAVA_URL")
+            updateStatus("Baixando Java 17...")
             downloadFile(JAVA_URL, tempFile)
             
-            updateStatus("Extraindo Java...")
-            Log.d("JavaDownloadWorker", "Extraindo para: ${envManager.binDir.parentFile?.absolutePath}")
-            val usrDir = envManager.binDir.parentFile
-            if (usrDir?.exists() == true) usrDir.deleteRecursively()
-            envManager.binDir.parentFile?.mkdirs()
+            updateStatus("Limpando ambiente antigo...")
+            if (envManager.prefixDir.exists()) envManager.prefixDir.deleteRecursively()
+            envManager.prefixDir.mkdirs()
             envManager.binDir.mkdirs()
             envManager.libDir.mkdirs()
             envManager.tmpDir.mkdirs()
             
-            // Extrai o Java diretamente para a pasta usr (estilo Termux)
-            extractFromFile(tempFile, envManager.binDir.parentFile!!)
+            updateStatus("Extraindo Java (Estilo Termux)...")
+            extractViaShell(tempFile, envManager.prefixDir)
             
             if (envManager.javaExecutable.exists()) {
-                updateStatus("Configurando permissões...")
-                
-                try {
-                    // O HACK DEFINITIVO: Copiar o binário para o diretório de libs nativas do Android
-                    // O Android permite execução nesta pasta se o arquivo tiver prefixo 'lib' e extensão '.so'
-                    val nativeDir = File(applicationContext.applicationInfo.nativeLibraryDir)
-                    val libJava = File(nativeDir, "libjava_exec.so")
-                    
-                    Log.d("JavaDownloadWorker", "Aplicando hack de execução nativa...")
-                    // O binário original está em usr/bin/java (extraído do tar.gz)
-                    val originalJava = File(envManager.binDir, "java")
-                    originalJava.inputStream().use { input ->
-                        libJava.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    
-                    // Dá permissão de execução no arquivo "disfarçado" e no original
-                    Runtime.getRuntime().exec("chmod 755 ${libJava.absolutePath}").waitFor()
-                    Runtime.getRuntime().exec("chmod -R 755 ${envManager.binDir.absolutePath}").waitFor()
-                    
-                    libJava.setExecutable(true, false)
-                    envManager.javaExecutable.setExecutable(true, false)
-                    
-                    Log.d("JavaDownloadWorker", "Hack aplicado em: ${libJava.absolutePath}")
-                } catch (e: Exception) {
-                    Log.e("JavaDownloadWorker", "Erro ao aplicar hack de permissão: ${e.message}")
-                    // Fallback apenas para o chmod original
-                    Runtime.getRuntime().exec("chmod -R 755 ${envManager.binDir.absolutePath}").waitFor()
-                }
+                updateStatus("Configurando permissões de execução...")
+                applyPermissions(envManager.binDir)
                 
                 updateStatus("Java instalado com sucesso!")
                 return Result.success()
             } else {
-                Log.e("JavaDownloadWorker", "Binário não encontrado em: ${envManager.javaExecutable.absolutePath}")
-                return Result.failure(workDataOf(KEY_STATUS to "Erro: Binário java não encontrado em ${envManager.javaExecutable.absolutePath}"))
+                return Result.failure(workDataOf(KEY_STATUS to "Erro: Binário java não encontrado após extração."))
             }
         } catch (e: Exception) {
-            Log.e("JavaDownloadWorker", "Erro durante o processo: ${e.message}", e)
+            Log.e("JavaDownloadWorker", "Erro: ${e.message}", e)
             return Result.failure(workDataOf(KEY_STATUS to "Erro: ${e.message}"))
         } finally {
             if (tempFile.exists()) tempFile.delete()
@@ -108,16 +75,14 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
         val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Falha no download: $response")
-            
-            val body = response.body ?: throw IOException("Corpo da resposta vazio")
+            val body = response.body ?: throw IOException("Corpo vazio")
             val contentLength = body.contentLength()
             
             body.byteStream().use { input ->
                 FileOutputStream(targetFile).use { output ->
-                    val buffer = ByteArray(8192)
+                    val buffer = ByteArray(16384)
                     var bytesRead: Int
                     var totalBytesRead = 0L
-                    
                     while (input.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
                         totalBytesRead += bytesRead
@@ -131,55 +96,28 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
         }
     }
 
-    private fun extractFromFile(file: File, destinationDir: File) {
-        Log.d("JavaDownloadWorker", "Extraindo via comando shell tar...")
-        
-        // No Android, o comando tar está disponível via toybox/busybox
-        // Usamos o comando shell para garantir que as permissões de execução e links simbólicos sejam preservados
-        // --strip-components=1 remove a pasta raiz (ex: jdk-17.0.10+7/)
+    private fun extractViaShell(file: File, destinationDir: File) {
+        // Usa o comando tar nativo com --strip-components=1 para extrair o conteúdo da pasta raiz do JDK
         val command = "tar -xzf ${file.absolutePath} -C ${destinationDir.absolutePath} --strip-components=1"
-        
         try {
             val process = Runtime.getRuntime().exec(command)
             val exitCode = process.waitFor()
-            
             if (exitCode != 0) {
                 val error = process.errorStream.bufferedReader().readText()
-                Log.e("JavaDownloadWorker", "Erro no tar (code $exitCode): $error")
-                
-                // Fallback para extração manual se o tar falhar (embora o tar seja o ideal para permissões)
-                extractManual(file, destinationDir)
+                Log.e("JavaDownloadWorker", "Erro no tar: $error")
+                throw IOException("Falha na extração via shell: $error")
             }
         } catch (e: Exception) {
-            Log.e("JavaDownloadWorker", "Falha ao executar comando tar: ${e.message}")
-            extractManual(file, destinationDir)
+            throw IOException("Erro ao executar comando de extração: ${e.message}")
         }
     }
 
-    private fun extractManual(file: File, destinationDir: File) {
-        java.io.FileInputStream(file).use { fis ->
-            val gzipIn = org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream(fis)
-            val tarIn = org.apache.commons.compress.archivers.tar.TarArchiveInputStream(gzipIn)
-            var entry = tarIn.nextTarEntry
-            while (entry != null) {
-                val name = entry.name
-                val parts = name.split("/")
-                if (parts.size > 1) {
-                    val strippedName = parts.drop(1).joinToString("/")
-                    if (strippedName.isNotEmpty()) {
-                        val outputFile = File(destinationDir, strippedName)
-                        if (entry.isDirectory) {
-                            outputFile.mkdirs()
-                        } else {
-                            outputFile.parentFile?.mkdirs()
-                            FileOutputStream(outputFile).use { fos ->
-                                tarIn.copyTo(fos)
-                            }
-                        }
-                    }
-                }
-                entry = tarIn.nextTarEntry
-            }
+    private fun applyPermissions(dir: File) {
+        try {
+            // Aplica permissão de execução recursivamente na pasta bin (estilo Termux)
+            Runtime.getRuntime().exec("chmod -R 755 ${dir.absolutePath}").waitFor()
+        } catch (e: Exception) {
+            Log.e("JavaDownloadWorker", "Erro ao aplicar permissões: ${e.message}")
         }
     }
 
@@ -187,15 +125,13 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
         setProgress(workDataOf(KEY_STATUS to status))
     }
 
-    private fun createForegroundInfo(progressText: String, notificationId: Int): ForegroundInfo {
+    private fun createForegroundInfo(text: String, id: Int): ForegroundInfo {
         val notification = NotificationCompat.Builder(applicationContext, ServerService.CHANNEL_ID)
-            .setContentTitle("Instalador Java")
-            .setTicker("Baixando Java")
-            .setContentText(progressText)
+            .setContentTitle("Instalador Traccar")
+            .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
             .build()
-
-        return ForegroundInfo(notificationId, notification)
+        return ForegroundInfo(id, notification)
     }
 }
