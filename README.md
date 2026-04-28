@@ -14,7 +14,7 @@ Um aplicativo Android em Java que atua como servidor para executar arquivos `.ja
 ## 📋 Requisitos
 
 - **Android 9 (API 28)** ou superior
-- **Java 21** (para compilação)
+- **Java 17** ou superior (para compilação)
 - **Gradle 8.2** ou superior
 - **Android SDK 35** (compileSdk)
 

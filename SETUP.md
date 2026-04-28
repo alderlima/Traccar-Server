@@ -5,7 +5,7 @@ Este documento fornece instruções detalhadas para configurar seu ambiente de d
 ## 📋 Pré-requisitos
 
 - **Sistema Operacional**: Windows, macOS ou Linux
-- **Java Development Kit (JDK)**: Versão 21 ou superior
+- **Java Development Kit (JDK)**: Versão 17 ou superior
 - **Android Studio**: Versão 2024.1 ou superior (recomendado)
 - **Android SDK**: API 35 (compileSdk)
 - **Gradle**: 8.2 ou superior (incluído no projeto)
