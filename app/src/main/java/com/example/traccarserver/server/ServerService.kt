@@ -62,25 +62,34 @@ class ServerService : Service() {
 
         serviceScope.launch {
             try {
-                val traccarDir = envManager.getTraccarDir() ?: throw IOException("Pasta do Traccar não selecionada")
-                val jarFile = envManager.getJarFile() ?: throw IOException("Arquivo .jar não encontrado")
-                val configPath = File(traccarDir, "conf/traccar.xml").absolutePath
-
-                if (!envManager.isJavaInstalled()) {
-                    throw IOException("Java não instalado no ambiente Termux.")
+                val traccarDir = envManager.getTraccarDir() ?: throw IOException("Pasta do Traccar não selecionada ou inacessível")
+                val jarFile = envManager.getJarFile() ?: throw IOException("Arquivo .jar não encontrado na pasta selecionada")
+                
+                // O Traccar geralmente precisa de um arquivo de configuração
+                val configPath = File(traccarDir, "conf/traccar.xml")
+                val args = mutableListOf<String>()
+                args.add(envManager.javaExecutable.absolutePath)
+                args.add("-Xms128m")
+                args.add("-Xmx512m")
+                args.add("-Djava.net.preferIPv4Stack=true")
+                args.add("-jar")
+                args.add(jarFile.absolutePath)
+                
+                if (configPath.exists()) {
+                    args.add(configPath.absolutePath)
+                    addLog("Usando configuração: ${configPath.absolutePath}")
+                } else {
+                    addLog("Aviso: conf/traccar.xml não encontrado. Tentando iniciar sem config específica.")
                 }
 
-                addLog("Iniciando ambiente Termux...")
+                if (!envManager.isJavaInstalled()) {
+                    throw IOException("Java não instalado ou sem permissão de execução.")
+                }
+
+                addLog("Iniciando processo Java...")
+                addLog("Comando: java -jar ${jarFile.name}")
                 
-                val processBuilder = ProcessBuilder(
-                    envManager.javaExecutable.absolutePath,
-                    "-Xms128m",
-                    "-Xmx512m",
-                    "-Djava.net.preferIPv4Stack=true",
-                    "-jar",
-                    jarFile.absolutePath,
-                    configPath
-                )
+                val processBuilder = ProcessBuilder(args)
 
                 // CONFIGURAÇÃO DE AMBIENTE ESTILO TERMUX ($PREFIX)
                 val env = processBuilder.environment()
@@ -107,7 +116,7 @@ class ServerService : Service() {
                 val exitCode = serverProcess?.waitFor()
                 addLog("Servidor finalizado (Código: $exitCode)")
             } catch (e: Exception) {
-                addLog("ERRO: ${e.message}")
+                addLog("ERRO CRÍTICO: ${e.message}")
                 Log.e("ServerService", "Falha no servidor", e)
             } finally {
                 stopServer()
@@ -129,8 +138,10 @@ class ServerService : Service() {
 
     private fun addLog(line: String) {
         Log.d("TraccarLog", line)
-        logLines.add(line)
-        if (logLines.size > 1000) logLines.removeAt(0)
+        synchronized(logLines) {
+            logLines.add(line)
+            if (logLines.size > 1000) logLines.removeAt(0)
+        }
         serviceScope.launch(Dispatchers.Main) { onLogAdded?.invoke(line) }
     }
 

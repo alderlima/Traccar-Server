@@ -54,6 +54,7 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
             updateStatus("Extraindo Java (Estilo Termux)...")
             extractViaShell(tempFile, envManager.prefixDir)
             
+            // Verifica se o binário java existe após a extração
             if (envManager.javaExecutable.exists()) {
                 updateStatus("Configurando permissões de execução...")
                 applyPermissions(envManager.binDir)
@@ -61,6 +62,14 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
                 updateStatus("Java instalado com sucesso!")
                 return Result.success()
             } else {
+                // Tenta encontrar o binário java em subpastas caso o --strip-components não tenha funcionado como esperado
+                val foundJava = findJavaBinary(envManager.prefixDir)
+                if (foundJava != null) {
+                    updateStatus("Java encontrado em: ${foundJava.parentFile.name}. Reconfigurando...")
+                    // Opcional: mover para binDir ou apenas aceitar o caminho
+                    applyPermissions(foundJava.parentFile)
+                    return Result.success()
+                }
                 return Result.failure(workDataOf(KEY_STATUS to "Erro: Binário java não encontrado após extração."))
             }
         } catch (e: Exception) {
@@ -97,24 +106,41 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     }
 
     private fun extractViaShell(file: File, destinationDir: File) {
-        // Usa o comando tar nativo com --strip-components=1 para extrair o conteúdo da pasta raiz do JDK
+        // Usa o comando tar nativo. Se falhar, o app precisaria de uma lib de extração.
         val command = "tar -xzf ${file.absolutePath} -C ${destinationDir.absolutePath} --strip-components=1"
         try {
             val process = Runtime.getRuntime().exec(command)
             val exitCode = process.waitFor()
             if (exitCode != 0) {
-                val error = process.errorStream.bufferedReader().readText()
-                Log.e("JavaDownloadWorker", "Erro no tar: $error")
-                throw IOException("Falha na extração via shell: $error")
+                // Tenta sem o strip-components se falhar
+                val fallbackCommand = "tar -xzf ${file.absolutePath} -C ${destinationDir.absolutePath}"
+                val fallbackProcess = Runtime.getRuntime().exec(fallbackCommand)
+                if (fallbackProcess.waitFor() != 0) {
+                    val error = fallbackProcess.errorStream.bufferedReader().readText()
+                    throw IOException("Falha na extração via shell: $error")
+                }
             }
         } catch (e: Exception) {
             throw IOException("Erro ao executar comando de extração: ${e.message}")
         }
     }
 
+    private fun findJavaBinary(dir: File): File? {
+        val files = dir.listFiles() ?: return null
+        for (file in files) {
+            if (file.isDirectory) {
+                val found = findJavaBinary(file)
+                if (found != null) return found
+            } else if (file.name == "java" && file.parentFile.name == "bin") {
+                return file
+            }
+        }
+        return null
+    }
+
     private fun applyPermissions(dir: File) {
         try {
-            // Aplica permissão de execução recursivamente na pasta bin (estilo Termux)
+            // Aplica permissão de execução recursivamente na pasta bin
             Runtime.getRuntime().exec("chmod -R 755 ${dir.absolutePath}").waitFor()
         } catch (e: Exception) {
             Log.e("JavaDownloadWorker", "Erro ao aplicar permissões: ${e.message}")

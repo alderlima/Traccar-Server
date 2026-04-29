@@ -1,7 +1,10 @@
 package com.example.traccarserver
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.webkit.WebView
@@ -29,6 +32,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -40,11 +44,31 @@ import com.example.traccarserver.ui.MainViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Solicitar permissões básicas na inicialização
+        requestPermissions()
+
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     AppNavigation()
                 }
+            }
+        }
+    }
+
+    private fun requestPermissions() {
+        val permissions = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        
+        if (permissions.isNotEmpty()) {
+            val toRequest = permissions.filter {
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+            }
+            if (toRequest.isNotEmpty()) {
+                requestPermissions(toRequest.toTypedArray(), 101)
             }
         }
     }
@@ -78,18 +102,26 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         uri?.let {
+            // Persistir a permissão de acesso persistente à pasta
+            context.contentResolver.takePersistableUriPermission(
+                it,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            
             val realPath = envManager.resolveUriToPath(it)
             if (realPath != null) {
                 viewModel.updateTraccarPath(realPath)
                 Toast.makeText(context, "Pasta selecionada: $realPath", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(context, "Erro ao resolver caminho da pasta", Toast.LENGTH_LONG).show()
+                // Se não conseguir resolver o caminho real, usamos a URI como fallback
+                viewModel.updateTraccarPath(it.toString())
+                Toast.makeText(context, "Pasta selecionada via SAF", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Traccar Server (Termux-Style)") }) }
+        topBar = { TopAppBar(title = { Text("Traccar Server Pro") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -102,7 +134,7 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
             StatusCard(
                 isTraccarReady,
                 isServerRunning,
-                traccarPath ?: "Não selecionada",
+                traccarPath ?: "Nenhuma pasta selecionada",
                 isJavaReady
             )
 
@@ -126,7 +158,13 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { viewModel.startServer() },
+                    onClick = { 
+                        if (isJavaReady && isTraccarReady) {
+                            viewModel.startServer() 
+                        } else {
+                            Toast.makeText(context, "Certifique-se que o Java e o Traccar estão prontos", Toast.LENGTH_LONG).show()
+                        }
+                    },
                     modifier = Modifier.weight(1f),
                     enabled = isTraccarReady && isJavaReady && !isServerRunning,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
@@ -147,8 +185,15 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
 
             Divider()
 
-            MenuButton(Icons.Default.List, "Ver Logs") { navController.navigate("logs") }
-            MenuButton(Icons.Default.Public, "Abrir Painel Web") { navController.navigate("web") }
+            MenuButton(Icons.Default.List, "Ver Logs do Terminal") { navController.navigate("logs") }
+            MenuButton(Icons.Default.Public, "Abrir Interface Web") { navController.navigate("web") }
+            
+            Text(
+                "Nota: O servidor roda em background. Acesse http://localhost:8082 no seu navegador.",
+                fontSize = 10.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }
@@ -157,6 +202,7 @@ fun MainScreen(navController: NavHostController, viewModel: MainViewModel) {
 fun StatusCard(ready: Boolean, running: Boolean, path: String, javaReady: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (running) Color(0xFFE8F5E9) else Color(0xFFF5F5F5)
         )
@@ -164,10 +210,10 @@ fun StatusCard(ready: Boolean, running: Boolean, path: String, javaReady: Boolea
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Status do Sistema", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            StatusRow("Pasta:", path, MaterialTheme.colorScheme.onSurfaceVariant)
-            StatusRow("Java 17:", if (javaReady) "Pronto (Termux)" else "Não instalado", if (javaReady) Color(0xFF4CAF50) else Color(0xFFF44336))
-            StatusRow("Traccar:", if (ready) "Encontrado" else "Não encontrado", if (ready) Color(0xFF4CAF50) else Color(0xFFF44336))
-            StatusRow("Servidor:", if (running) "Ativo" else "Inativo", if (running) Color(0xFF4CAF50) else Color(0xFFF44336))
+            StatusRow("Pasta:", path.split("/").lastOrNull() ?: path, MaterialTheme.colorScheme.onSurfaceVariant)
+            StatusRow("Java 17:", if (javaReady) "Instalado" else "Pendente", if (javaReady) Color(0xFF4CAF50) else Color(0xFFF44336))
+            StatusRow("JAR Server:", if (ready) "Encontrado" else "Não encontrado", if (ready) Color(0xFF4CAF50) else Color(0xFFF44336))
+            StatusRow("Servidor:", if (running) "EM EXECUÇÃO" else "PARADO", if (running) Color(0xFF4CAF50) else Color(0xFFF44336))
         }
     }
 }
@@ -179,14 +225,14 @@ fun JavaInstallCard(progress: Int?, status: String?, onDownloadClick: () -> Unit
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
     ) {
         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Ambiente Termux Necessário", style = MaterialTheme.typography.titleSmall)
+            Text("Configuração Necessária", style = MaterialTheme.typography.titleSmall)
             Text(
-                "O ambiente Java 17 estilo Termux precisa ser preparado para rodar o servidor com segurança.",
+                "O Traccar requer um ambiente Java 17. Clique abaixo para baixar e configurar automaticamente.",
                 fontSize = 12.sp,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
             
-            if (progress != null && progress > 0) {
+            if (progress != null && progress >= 0) {
                 status?.let { Text(it, fontSize = 12.sp, color = Color.DarkGray) }
                 LinearProgressIndicator(
                     progress = progress / 100f,
@@ -197,7 +243,7 @@ fun JavaInstallCard(progress: Int?, status: String?, onDownloadClick: () -> Unit
                 Button(onClick = onDownloadClick) {
                     Icon(Icons.Default.Download, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Instalar Ambiente Java 17")
+                    Text("Baixar Java 17 (AArch64)")
                 }
             }
         }
@@ -206,8 +252,8 @@ fun JavaInstallCard(progress: Int?, status: String?, onDownloadClick: () -> Unit
 
 @Composable
 fun StatusRow(label: String, value: String, color: Color) {
-    Row {
-        Text(label, modifier = Modifier.width(80.dp), fontSize = 14.sp)
+    Row(modifier = Modifier.padding(vertical = 2.dp)) {
+        Text(label, modifier = Modifier.width(90.dp), fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         Text(value, color = color, style = MaterialTheme.typography.bodyMedium, fontSize = 14.sp)
     }
 }
@@ -239,7 +285,7 @@ fun LogsScreen(navController: NavHostController, viewModel: MainViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Logs do Terminal") },
+                title = { Text("Terminal de Logs") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
@@ -253,15 +299,16 @@ fun LogsScreen(navController: NavHostController, viewModel: MainViewModel) {
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(Color(0xFF121212))
                 .padding(8.dp)
         ) {
             items(logs) { log ->
                 Text(
                     text = log,
-                    color = Color.Green,
+                    color = Color(0xFF00FF00),
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(vertical = 1.dp)
                 )
             }
         }
@@ -274,7 +321,7 @@ fun WebViewScreen(navController: NavHostController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Painel Traccar") },
+                title = { Text("Interface Traccar") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
@@ -289,6 +336,7 @@ fun WebViewScreen(navController: NavHostController) {
                 WebView(context).apply {
                     webViewClient = WebViewClient()
                     settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
                     loadUrl("http://127.0.0.1:8082")
                 }
             }
