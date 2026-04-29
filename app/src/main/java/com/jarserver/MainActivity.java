@@ -213,7 +213,7 @@ public class MainActivity extends AppCompatActivity implements ServerService.Ser
             isServerRunning = running;
             startServerBtn.setEnabled(!running);
             stopServerBtn.setEnabled(running);
-            statusText.setText(running ? getString(R.string.status_running) : getString(R.string.status_idle));
+            statusText.setText(running ? R.string.status_running : R.string.status_idle);
         });
 
         viewModel.getSelectedFolderPath().observe(this, path -> {
