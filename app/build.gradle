@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.example.traccarserver'
+    namespace 'com.jarserver'
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.example.traccarserver"
+        applicationId "com.jarserver"
         minSdk 28
         targetSdk 35
         versionCode 1
