@@ -154,18 +154,10 @@ public class ServerService extends Service {
         pb.redirectErrorStream(true);
         jarProcess = pb.start();
 
-        // Substitua a linha 157 por algo assim:
-        int pid = -1;
-        try {
-            java.lang.reflect.Field f = jarProcess.getClass().getDeclaredField("pid");
-            f.setAccessible(true);
-            pid = f.getInt(jarProcess);
-        } catch (Exception e) {
-            pid = -1;
-        }
-        
-        notifyLog("Servidor iniciado com PID: " + pid);
-
+        // Obter PID do processo (Java 9+)
+        long pid = jarProcess.pid();
+        notifyLog("Servidor Traccar iniciado com PID: " + pid);
+        notifyLog("Acesse a interface web em: http://localhost:8082");
         notifyServerStarted();
 
         // Ler output do processo
