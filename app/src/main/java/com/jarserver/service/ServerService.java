@@ -143,26 +143,42 @@ public class ServerService extends Service {
             notifyError("Java não encontrado no sistema");
             return;
         }
-
+    
         ProcessBuilder pb = new ProcessBuilder(
                 javaPath + "/bin/java",
                 "-Xmx256m",
                 "-jar",
                 jarFile.getAbsolutePath()
         );
-
+    
         pb.redirectErrorStream(true);
         jarProcess = pb.start();
-
-        // Obter PID do processo (Java 9+)
-        long pid = jarProcess.pid();
-        notifyLog("Servidor Traccar iniciado com PID: " + pid);
+    
+        // Obter PID de forma compatível com Java 8/Android
+        long pid = -1;
+        try {
+            java.lang.reflect.Field f = jarProcess.getClass().getDeclaredField("pid");
+            f.setAccessible(true);
+            pid = f.getLong(jarProcess);
+            f.setAccessible(false);
+        } catch (Exception e) {
+            // Fallback ou apenas log de erro
+            pid = -1;
+        }
+    
+        if (pid != -1) {
+            notifyLog("Servidor Traccar iniciado com PID: " + pid);
+        } else {
+            notifyLog("Servidor Traccar iniciado (PID indisponível)");
+        }
+        
         notifyLog("Acesse a interface web em: http://localhost:8082");
         notifyServerStarted();
-
+    
         // Ler output do processo
         readProcessOutput();
     }
+
 
     private void readProcessOutput() {
         executorService.execute(() -> {
