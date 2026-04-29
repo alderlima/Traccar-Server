@@ -242,7 +242,7 @@ fun JavaInstallCard(progress: Int?, status: String?, onDownloadClick: () -> Unit
                 Text("$progress%", fontSize = 10.sp)
             } else {
                 Button(onClick = onDownloadClick) {
-                    Icon(Icons.Default.Download, contentDescription = null)
+                    Icon(Icons.Default.FileDownload, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Baixar Java 17 (AArch64)")
                 }
