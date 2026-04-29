@@ -9,7 +9,7 @@
     <!-- AppBarLayout com Material Design 3 -->
     <com.google.android.material.appbarLayout.AppBarLayout
         android:layout_width="match_parent"
-         android:layout_height="wrap_content"
+        android:layout_height="wrap_content"
         android:elevation="4dp">
 
         <com.google.android.material.appbarLayout.MaterialToolbar
