@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Traccar Server</string>
+    <string name="app_name">JAR Server</string>
     <string name="btn_select_folder">Selecionar Pasta</string>
     <string name="btn_start_server">Iniciar Servidor</string>
     <string name="btn_stop_server">Parar Servidor</string>
     <string name="btn_clear_logs">Limpar Logs</string>
-    <string name="status_idle">Traccar Inativo</string>
-    <string name="status_running">Traccar Ativo</string>
+    <string name="status_idle">Servidor Inativo</string>
+    <string name="status_running">Servidor Ativo</string>
     <string name="status_stopped">Servidor Parado</string>
     <string name="no_folder_selected">Nenhuma pasta selecionada</string>
     <string name="folder_selected">Pasta selecionada</string>
-    <string name="server_notification_title">Traccar Server Ativo</string>
-    <string name="server_notification_text">Acesse em http://localhost:8082</string>
+    <string name="server_notification_title">Servidor JAR Ativo</string>
+    <string name="server_notification_text">O servidor está rodando em background</string>
     <string name="error_no_folder">Por favor, selecione uma pasta primeiro</string>
     <string name="error_jar_not_found">Arquivo .jar não encontrado na pasta</string>
     <string name="error_permission_denied">Permissão negada para acessar a pasta</string>
