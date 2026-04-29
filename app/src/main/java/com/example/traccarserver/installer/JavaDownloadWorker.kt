@@ -1,12 +1,14 @@
 package com.example.traccarserver.installer
 
+import android.app.*
 import android.content.Context
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import androidx.core.app.NotificationCompat
 import com.example.traccarserver.server.ServerService
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -26,54 +28,60 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     companion object {
         const val KEY_PROGRESS = "PROGRESS"
         const val KEY_STATUS = "STATUS"
-        // URL para o Java 17 (OpenJDK) para Android/Linux aarch64
         const val JAVA_URL = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.10%2B7/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.10_7.tar.gz"
+        private const val NOTIFICATION_ID = 2001
+        private const val CHANNEL_ID = "traccar_installer_channel"
     }
 
     override suspend fun doWork(): Result {
-        val notificationId = 2001
-        try {
-            setForeground(createForegroundInfo("Preparando ambiente Termux...", notificationId))
-        } catch (e: Exception) {
-            Log.e("JavaDownloadWorker", "Erro ao definir foreground: ${e.message}")
-        }
+        // Cria o canal de notificação (necessário para API 26+)
+        createNotificationChannel()
 
+        // Define foreground ANTES de qualquer operação suspensa
+        val foregroundInfo = createForegroundInfo("Preparando ambiente...")
+        setForeground(foregroundInfo)
+
+        return try {
+            executeInstallation()
+        } catch (e: Exception) {
+            Log.e("JavaDownloadWorker", "Erro fatal: ${e.message}", e)
+            Result.failure(workDataOf(KEY_STATUS to "Erro: ${e.message}"))
+        }
+    }
+
+    private suspend fun executeInstallation(): Result {
         val tempFile = File(applicationContext.cacheDir, "java17.tar.gz")
-        
+
         try {
-            updateStatus("Baixando Java 17...")
+            updateStatus("Baixando Java 17 (AArch64)...")
             downloadFile(JAVA_URL, tempFile)
-            
-            updateStatus("Limpando ambiente antigo...")
+
+            updateStatus("Limpando ambiente anterior...")
             if (envManager.prefixDir.exists()) envManager.prefixDir.deleteRecursively()
             envManager.prefixDir.mkdirs()
             envManager.binDir.mkdirs()
             envManager.libDir.mkdirs()
             envManager.tmpDir.mkdirs()
-            
-            updateStatus("Extraindo Java (Estilo Termux)...")
+
+            updateStatus("Extraindo arquivos...")
             extractViaShell(tempFile, envManager.prefixDir)
-            
-            // Verifica se o binário java existe após a extração
-            if (envManager.javaExecutable.exists()) {
-                updateStatus("Configurando permissões de execução...")
-                applyPermissions(envManager.binDir)
-                
-                updateStatus("Java instalado com sucesso!")
+
+            // Localiza o binário java recursivamente
+            val javaBin = findJavaBinary(envManager.prefixDir)
+            if (javaBin != null && javaBin.exists()) {
+                updateStatus("Configurando permissões...")
+                applyPermissions(javaBin.parentFile ?: envManager.binDir)
+
+                // Atualiza o EnvironmentManager com o caminho real
+                saveJavaPath(javaBin)
+
+                updateStatus("Java 17 instalado com sucesso!")
                 return Result.success()
             } else {
-                // Tenta encontrar o binário java em subpastas caso o --strip-components não tenha funcionado como esperado
-                val foundJava = findJavaBinary(envManager.prefixDir)
-                if (foundJava != null) {
-                    updateStatus("Java encontrado em: ${foundJava.parentFile.name}. Reconfigurando...")
-                    // Opcional: mover para binDir ou apenas aceitar o caminho
-                    applyPermissions(foundJava.parentFile)
-                    return Result.success()
-                }
-                return Result.failure(workDataOf(KEY_STATUS to "Erro: Binário java não encontrado após extração."))
+                return Result.failure(workDataOf(KEY_STATUS to "Binário java não encontrado após extração"))
             }
         } catch (e: Exception) {
-            Log.e("JavaDownloadWorker", "Erro: ${e.message}", e)
+            Log.e("JavaDownloadWorker", "Erro durante instalação: ${e.message}", e)
             return Result.failure(workDataOf(KEY_STATUS to "Erro: ${e.message}"))
         } finally {
             if (tempFile.exists()) tempFile.delete()
@@ -83,10 +91,10 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     private suspend fun downloadFile(url: String, targetFile: File) {
         val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Falha no download: $response")
+            if (!response.isSuccessful) throw IOException("Falha no download: ${response.code}")
             val body = response.body ?: throw IOException("Corpo vazio")
             val contentLength = body.contentLength()
-            
+
             body.byteStream().use { input ->
                 FileOutputStream(targetFile).use { output ->
                     val buffer = ByteArray(16384)
@@ -106,58 +114,81 @@ class JavaDownloadWorker(context: Context, parameters: WorkerParameters) :
     }
 
     private fun extractViaShell(file: File, destinationDir: File) {
-        // Usa o comando tar nativo. Se falhar, o app precisaria de uma lib de extração.
+        // Tenta com --strip-components=1
         val command = "tar -xzf ${file.absolutePath} -C ${destinationDir.absolutePath} --strip-components=1"
         try {
             val process = Runtime.getRuntime().exec(command)
             val exitCode = process.waitFor()
-            if (exitCode != 0) {
-                // Tenta sem o strip-components se falhar
-                val fallbackCommand = "tar -xzf ${file.absolutePath} -C ${destinationDir.absolutePath}"
-                val fallbackProcess = Runtime.getRuntime().exec(fallbackCommand)
-                if (fallbackProcess.waitFor() != 0) {
-                    val error = fallbackProcess.errorStream.bufferedReader().readText()
-                    throw IOException("Falha na extração via shell: $error")
-                }
-            }
+            if (exitCode == 0) return
         } catch (e: Exception) {
-            throw IOException("Erro ao executar comando de extração: ${e.message}")
+            Log.w("JavaDownloadWorker", "Falha no comando com strip, tentando sem...")
+        }
+
+        // Fallback: extrair completo
+        val fallbackCommand = "tar -xzf ${file.absolutePath} -C ${destinationDir.absolutePath}"
+        val fallbackProcess = Runtime.getRuntime().exec(fallbackCommand)
+        if (fallbackProcess.waitFor() != 0) {
+            val error = fallbackProcess.errorStream.bufferedReader().readText()
+            throw IOException("Falha na extração: $error")
         }
     }
 
     private fun findJavaBinary(dir: File): File? {
-        val files = dir.listFiles() ?: return null
-        for (file in files) {
+        if (!dir.exists() || !dir.isDirectory) return null
+        dir.listFiles()?.forEach { file ->
             if (file.isDirectory) {
-                val found = findJavaBinary(file)
-                if (found != null) return found
-            } else if (file.name == "java" && file.parentFile.name == "bin") {
+                findJavaBinary(file)?.let { return it }
+            } else if (file.name == "java" && file.parentFile?.name == "bin") {
                 return file
             }
         }
         return null
     }
 
-    private fun applyPermissions(dir: File) {
+    private fun applyPermissions(binDir: File) {
         try {
-            // Aplica permissão de execução recursivamente na pasta bin
-            Runtime.getRuntime().exec("chmod -R 755 ${dir.absolutePath}").waitFor()
+            // Torna todos os arquivos dentro de binDir executáveis
+            binDir.listFiles()?.forEach { file ->
+                if (file.isFile) {
+                    file.setExecutable(true, false)
+                }
+            }
+            Runtime.getRuntime().exec("chmod -R 755 ${binDir.absolutePath}").waitFor()
         } catch (e: Exception) {
             Log.e("JavaDownloadWorker", "Erro ao aplicar permissões: ${e.message}")
         }
+    }
+
+    private fun saveJavaPath(javaBin: File) {
+        val prefs = applicationContext.getSharedPreferences("traccar_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("java_executable_path", javaBin.absolutePath).apply()
     }
 
     private suspend fun updateStatus(status: String) {
         setProgress(workDataOf(KEY_STATUS to status))
     }
 
-    private fun createForegroundInfo(text: String, id: Int): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, ServerService.CHANNEL_ID)
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Instalador Traccar",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Notificações de download e instalação do Java"
+            }
+            val manager = applicationContext.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createForegroundInfo(text: String): ForegroundInfo {
+        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle("Instalador Traccar")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
             .build()
-        return ForegroundInfo(id, notification)
+        return ForegroundInfo(NOTIFICATION_ID, notification)
     }
 }

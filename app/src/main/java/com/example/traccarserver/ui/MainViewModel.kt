@@ -98,6 +98,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startJavaDownload() {
         Log.d("MainViewModel", "Iniciando download do Java 17...")
+        // Cancela qualquer worker anterior com a mesma tag
+        workManager.cancelAllWorkByTag("java_download")
         val request = OneTimeWorkRequestBuilder<JavaDownloadWorker>()
             .addTag("java_download")
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
