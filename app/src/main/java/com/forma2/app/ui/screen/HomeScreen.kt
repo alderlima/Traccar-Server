@@ -114,7 +114,7 @@ fun HomeScreen(viewModel: MainViewModel) {
             if (uiState.jarFiles.isNotEmpty()) {
                 Text(
                     "Arquivos .jar encontrados:",
-                    style = MaterialTheme.typography.subtitle1,
+                    style = MaterialTheme.typography.titleMedium, // CORRIGIDO
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 LazyColumn(
@@ -205,7 +205,7 @@ fun HomeScreen(viewModel: MainViewModel) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Logs
-            Text("Logs:", style = MaterialTheme.typography.subtitle1)
+            Text("Logs:", style = MaterialTheme.typography.titleMedium)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()

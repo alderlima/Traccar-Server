@@ -1,6 +1,7 @@
 package com.forma2.app.viewmodel
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
@@ -125,7 +126,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun refreshJarList(dirUri: Uri) {
         viewModelScope.launch {
             val docFile = DocumentFile.fromTreeUri(getApplication(), dirUri)
-            val jarFiles = docFile?.listFiles()?.filter {
+            val jarFiles: List<DocumentFile> = docFile?.listFiles()?.filter {
                 it.isFile && it.name?.endsWith(".jar", true) == true
             } ?: emptyList()
             _uiState.update { it.copy(jarFiles = jarFiles) }
@@ -134,10 +135,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectJar(docFile: DocumentFile) {
         viewModelScope.launch {
-            val cacheDir = File(getApplication().cacheDir, "jars").also { it.mkdirs() }
-            val destFile = File(cacheDir, docFile.name ?: "app.jar")
+            val cacheDir = File(getApplication<Application>().cacheDir, "jars").also { dir ->
+                dir.mkdirs()
+            }
+            val fileName = docFile.name ?: "app.jar"
+            val destFile = File(cacheDir, fileName)
             try {
-                getApplication().contentResolver.openInputStream(docFile.uri)?.use { input ->
+                getApplication<Application>().contentResolver.openInputStream(docFile.uri)?.use { input ->
                     destFile.outputStream().use { output ->
                         input.copyTo(output)
                     }
@@ -157,7 +161,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val jarPath = state.selectedJarPath
         val jdkPath = state.jdkPath
         if (jarPath.isNotEmpty() && jdkPath.isNotEmpty()) {
-            val workingDir = File(jarPath).parent ?: getApplication().filesDir.absolutePath
+            val workingDir = File(jarPath).parent ?: getApplication<Application>().filesDir.absolutePath
             JavaProcessService.start(
                 context = getApplication(),
                 jarPath = jarPath,
