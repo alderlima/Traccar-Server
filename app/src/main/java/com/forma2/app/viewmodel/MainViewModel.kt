@@ -159,7 +159,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         if (state.processRunning) return
         val jarPath = state.selectedJarPath
-        val jdkPath = state.jdkPath
+        val jdkPath = state.jdkPath // que agora é o caminho da JRE
         if (jarPath.isNotEmpty() && jdkPath.isNotEmpty()) {
             val workingDir = File(jarPath).parent ?: getApplication<Application>().filesDir.absolutePath
             JavaProcessService.start(

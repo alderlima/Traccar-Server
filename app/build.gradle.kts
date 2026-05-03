@@ -13,9 +13,16 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-    
+
         ndk {
             abiFilters += listOf("arm64-v8a")
+        }
+
+        // Informa onde as libs nativas serão geradas
+        externalNativeBuild {
+            cmake {
+                cppFlags += ""
+            }
         }
     }
 
@@ -46,6 +53,17 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        // Não comprimir bibliotecas nativas
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    // Diretório onde as libs nativas extraídas serão colocadas
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
         }
     }
 }

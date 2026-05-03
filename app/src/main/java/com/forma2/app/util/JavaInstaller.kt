@@ -12,20 +12,22 @@ import java.util.zip.GZIPInputStream
 
 object JavaInstaller {
 
-    suspend fun downloadAndExtract(
+    suspend fun downloadAndExtractJre(
         context: Context,
         onProgress: (Float) -> Unit
     ): String? = withContext(Dispatchers.IO) {
-        val jdkDir = File(context.filesDir, "jdk-17")
-        if (jdkDir.exists() && File(jdkDir, "bin/java").exists()) {
-            ensureExecutableBinaries(jdkDir)
-            return@withContext jdkDir.absolutePath
+        // Diretório onde as libs nativas da JVM serão extraídas (será adicionado ao jniLibs via symlink? Não, vamos extrair diretamente)
+        val jreDir = File(context.filesDir, "jre")
+        if (jreDir.exists() && File(jreDir, "lib/libjvm.so").exists()) {
+            return@withContext jreDir.absolutePath
         }
 
         val client = OkHttpClient.Builder()
             .followRedirects(true)
             .build()
-        val apiUrl = "https://api.adoptium.net/v3/binary/latest/17/ga/linux/aarch64/jdk/hotspot/normal/eclipse?project=jdk"
+        // Baixa a JRE mínima para aarch64 (exemplo usando Adoptium, procure um endpoint de JRE)
+        // Usaremos a API do Adoptium para JRE
+        val apiUrl = "https://api.adoptium.net/v3/binary/latest/17/ga/linux/aarch64/jre/hotspot/normal/eclipse?project=jdk"
         val request = Request.Builder().url(apiUrl).build()
         val response = client.newCall(request).execute()
         if (!response.isSuccessful) throw Exception("Download falhou: ${response.code}")
@@ -34,7 +36,7 @@ object JavaInstaller {
         val contentLength = body.contentLength()
         var downloadedBytes = 0L
 
-        val tempFile = File(context.cacheDir, "jdk.tar.gz")
+        val tempFile = File(context.cacheDir, "jre.tar.gz")
         body.byteStream().use { input ->
             FileOutputStream(tempFile).use { output ->
                 val buffer = ByteArray(8192)
@@ -49,14 +51,14 @@ object JavaInstaller {
             }
         }
 
-        // Extração
-        jdkDir.mkdirs()
+        // Extrai para jreDir, preservando a estrutura (ex.: jdk-17.0.19+10-jre/)
+        jreDir.mkdirs()
         tempFile.inputStream().use { fileStream ->
             GZIPInputStream(fileStream).use { gzStream ->
                 TarArchiveInputStream(gzStream).use { tarInput ->
                     var entry = tarInput.nextTarEntry
                     while (entry != null) {
-                        val entryFile = File(jdkDir, entry.name)
+                        val entryFile = File(jreDir, entry.name)
                         if (entry.isDirectory) {
                             entryFile.mkdirs()
                         } else {
@@ -70,30 +72,10 @@ object JavaInstaller {
                 }
             }
         }
-
         tempFile.delete()
 
-        // Garantir permissão de execução nos binários
-        ensureExecutableBinaries(jdkDir)
-
-        // Localizar o diretório raiz do JDK (pode ter subdiretório como jdk-17.0.19+10)
-        val javaBinary = jdkDir.walkTopDown().find { it.isFile && it.name == "java" }
-        if (javaBinary != null) {
-            // Retorna o diretório que contém a pasta "bin"
-            javaBinary.parentFile?.parentFile?.absolutePath
-        } else {
-            null
-        }
-    }
-
-    private fun ensureExecutableBinaries(jdkRoot: File) {
-        // Percorre todos os arquivos dentro de qualquer diretório "bin"
-        jdkRoot.walkTopDown().filter { it.isFile && it.parentFile?.name == "bin" }.forEach { file ->
-            file.setExecutable(true, false)
-        }
-        // Também garante permissão de execução nos diretórios bin
-        jdkRoot.walkTopDown().filter { it.isDirectory && it.name == "bin" }.forEach { dir ->
-            dir.setExecutable(true, false)
-        }
+        // Encontrar o diretório raiz da JRE extraída (pode ter subdiretório)
+        val jreRoot = jreDir.walkTopDown().firstOrNull { it.isDirectory && File(it, "lib/libjvm.so").exists() }
+        jreRoot?.absolutePath
     }
 }
