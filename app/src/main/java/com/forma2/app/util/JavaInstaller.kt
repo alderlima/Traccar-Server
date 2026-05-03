@@ -18,6 +18,7 @@ object JavaInstaller {
     ): String? = withContext(Dispatchers.IO) {
         val jdkDir = File(context.filesDir, "jdk-17")
         if (jdkDir.exists() && File(jdkDir, "bin/java").exists()) {
+            ensureExecutableBinaries(jdkDir)
             return@withContext jdkDir.absolutePath
         }
 
@@ -63,9 +64,6 @@ object JavaInstaller {
                             entryFile.outputStream().use { out ->
                                 tarInput.copyTo(out)
                             }
-                            if (entry.name.contains("bin/java")) {
-                                entryFile.setExecutable(true)
-                            }
                         }
                         entry = tarInput.nextTarEntry
                     }
@@ -75,11 +73,27 @@ object JavaInstaller {
 
         tempFile.delete()
 
-        // O tar pode vir com diretório raiz, localizar java
+        // Garantir permissão de execução nos binários
+        ensureExecutableBinaries(jdkDir)
+
+        // Localizar o diretório raiz do JDK (pode ter subdiretório como jdk-17.0.19+10)
         val javaBinary = jdkDir.walkTopDown().find { it.isFile && it.name == "java" }
         if (javaBinary != null) {
-            javaBinary.setExecutable(true)
+            // Retorna o diretório que contém a pasta "bin"
             javaBinary.parentFile?.parentFile?.absolutePath
-        } else null
+        } else {
+            null
+        }
+    }
+
+    private fun ensureExecutableBinaries(jdkRoot: File) {
+        // Percorre todos os arquivos dentro de qualquer diretório "bin"
+        jdkRoot.walkTopDown().filter { it.isFile && it.parentFile?.name == "bin" }.forEach { file ->
+            file.setExecutable(true, false)
+        }
+        // Também garante permissão de execução nos diretórios bin
+        jdkRoot.walkTopDown().filter { it.isDirectory && it.name == "bin" }.forEach { dir ->
+            dir.setExecutable(true, false)
+        }
     }
 }
