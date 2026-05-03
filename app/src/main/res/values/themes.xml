@@ -1,19 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Theme.JarServerApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/md_theme_light_primary</item>
-        <item name="colorOnPrimary">@color/md_theme_light_on_primary</item>
-        <item name="colorPrimaryVariant">@color/md_theme_light_primary_container</item>
-
-        <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/md_theme_light_secondary</item>
-        <item name="colorOnSecondary">@color/md_theme_light_on_secondary</item>
-        <item name="colorSecondaryVariant">@color/md_theme_light_secondary_container</item>
-
-        <!-- Status bar color. -->
-        <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
-        <!-- Customize your theme here. -->
-    </style>
+<resources>
+    <style name="Theme.Forma2" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>
