@@ -5,77 +5,126 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.util.zip.GZIPInputStream
 
 object JavaInstaller {
+
+    // Espelhos dos pacotes oficiais do Termux (versão 17.0.31, aarch64)
+    private const val BASE_URL = "https://mirrors.cqupt.edu.cn/termux/apt/termux-main/pool/main/o"
+    private const val JDK_DEB = "openjdk-17_17.0-31_aarch64.deb"
+    private const val JDK_X_DEB = "openjdk-17-x_17.0-31_aarch64.deb"
 
     suspend fun downloadAndExtractJre(
         context: Context,
         onProgress: (Float) -> Unit
     ): String? = withContext(Dispatchers.IO) {
-        val jreDir = File(context.filesDir, "jre")
-        // Se já existir libjvm.so, retorna o caminho
-        if (jreDir.exists() && jreDir.walkTopDown().any { it.isFile && it.name == "libjvm.so" }) {
-            return@withContext jreDir.absolutePath
+        val jdkDir = File(context.filesDir, "jdk-17")
+        val javaBin = File(jdkDir, "bin/java")
+        if (javaBin.exists()) {
+            // Garantir permissão de execução
+            makeExecutable(javaBin)
+            return@withContext jdkDir.absolutePath
         }
 
-        val client = OkHttpClient.Builder()
-            .followRedirects(true)
-            .build()
-        // Endpoint da JRE do Adoptium para aarch64 Linux
-        val apiUrl = "https://api.adoptium.net/v3/binary/latest/17/ga/linux/aarch64/jre/hotspot/normal/eclipse?project=jdk"
-        val request = Request.Builder().url(apiUrl).build()
+        val client = OkHttpClient.Builder().followRedirects(true).build()
+
+        // Baixar e extrair o pacote principal
+        val mainDeb = downloadFile(client, "$BASE_URL/openjdk-17/$JDK_DEB", context, 0.5f, onProgress)
+        val xDeb = downloadFile(client, "$BASE_URL/openjdk-17-x/$JDK_X_DEB", context, 0.5f, onProgress)
+
+        jdkDir.deleteRecursively()
+        jdkDir.mkdirs()
+
+        extractDeb(mainDeb, jdkDir)
+        extractDeb(xDeb, jdkDir)
+
+        mainDeb.delete()
+        xDeb.delete()
+
+        // Tornar executáveis os binários e bibliotecas
+        makeExecutable(javaBin)
+        jdkDir.walkTopDown()
+            .filter { it.isFile && it.extension in listOf("so", "dylib") }
+            .forEach { makeExecutable(it) }
+
+        // Configurar um pequeno wrapper para LD_PRELOAD (opcional, mas recomendado)
+        setupLdPreload(jdkDir)
+
+        javaBin.parentFile?.parentFile?.absolutePath
+    }
+
+    private suspend fun downloadFile(
+        client: OkHttpClient,
+        url: String,
+        context: Context,
+        weight: Float,
+        onProgress: (Float) -> Unit
+    ): File {
+        val request = Request.Builder().url(url).build()
         val response = client.newCall(request).execute()
         if (!response.isSuccessful) throw Exception("Download falhou: ${response.code}")
 
         val body = response.body ?: throw Exception("Resposta vazia")
-        val contentLength = body.contentLength()
-        var downloadedBytes = 0L
-
-        val tempFile = File(context.cacheDir, "jre.tar.gz")
-        body.byteStream().use { input ->
-            FileOutputStream(tempFile).use { output ->
+        val file = File(context.cacheDir, url.substringAfterLast('/'))
+        FileOutputStream(file).use { output ->
+            body.byteStream().use { input ->
                 val buffer = ByteArray(8192)
-                var bytes: Int
-                while (input.read(buffer).also { bytes = it } != -1) {
-                    output.write(buffer, 0, bytes)
-                    downloadedBytes += bytes
-                    if (contentLength > 0) {
-                        onProgress(downloadedBytes.toFloat() / contentLength.toFloat())
-                    }
+                var len: Int
+                while (input.read(buffer).also { len = it } != -1) {
+                    output.write(buffer, 0, len)
                 }
             }
         }
+        onProgress(weight)
+        return file
+    }
 
-        // Limpa e extrai
-        jreDir.deleteRecursively()
-        jreDir.mkdirs()
-        tempFile.inputStream().use { fileStream ->
-            GZIPInputStream(fileStream).use { gzStream ->
-                TarArchiveInputStream(gzStream).use { tarInput ->
-                    var entry = tarInput.nextTarEntry
-                    while (entry != null) {
-                        val entryFile = File(jreDir, entry.name)
-                        if (entry.isDirectory) {
-                            entryFile.mkdirs()
-                        } else {
-                            entryFile.parentFile?.mkdirs()
-                            entryFile.outputStream().use { out ->
-                                tarInput.copyTo(out)
+    private fun extractDeb(debFile: File, destDir: File) {
+        // .deb é um archive ar, contendo control.tar.xz e data.tar.xz
+        ArArchiveInputStream(debFile.inputStream()).use { ar ->
+            var entry = ar.nextArEntry
+            while (entry != null) {
+                val name = entry.name
+                if (name == "data.tar.xz") {
+                    // Extrair data.tar.xz para destDir
+                    XZCompressorInputStream(ar).use { xzIn ->
+                        TarArchiveInputStream(xzIn).use { tar ->
+                            var tarEntry = tar.nextTarEntry
+                            while (tarEntry != null) {
+                                val outFile = File(destDir, tarEntry.name)
+                                if (tarEntry.isDirectory) outFile.mkdirs()
+                                else {
+                                    outFile.parentFile?.mkdirs()
+                                    outFile.outputStream().use { tar.copyTo(it) }
+                                }
+                                tarEntry = tar.nextTarEntry
                             }
                         }
-                        entry = tarInput.nextTarEntry
                     }
                 }
+                entry = ar.nextArEntry
             }
         }
-        tempFile.delete()
+    }
 
-        // Procura o diretório raiz da JRE (onde está lib/libjvm.so)
-        val jreRoot = jreDir.walkTopDown().firstOrNull { it.isDirectory && File(it, "lib/libjvm.so").exists() }
-        jreRoot?.absolutePath
+    private fun makeExecutable(file: File) {
+        file.setReadable(true, false)
+        file.setExecutable(true, false)
+    }
+
+    private fun setupLdPreload(jdkDir: File) {
+        // O binário java do Termux precisa de libandroid-shmem.so
+        // que já estará no diretório lib/ após extrair openjdk-17-x.
+        // Criamos um script wrapper que define LD_PRELOAD.
+        val wrapper = File(jdkDir, "bin/java-wrapper")
+        wrapper.writeText("""#!/system/bin/sh
+export LD_PRELOAD="${jdkDir.absolutePath}/lib/libandroid-shmem.so"
+exec ${jdkDir.absolutePath}/bin/java "\$@"
+""")
+        makeExecutable(wrapper)
     }
 }
