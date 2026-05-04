@@ -16,17 +16,16 @@ object JavaInstaller {
         context: Context,
         onProgress: (Float) -> Unit
     ): String? = withContext(Dispatchers.IO) {
-        // Diretório onde as libs nativas da JVM serão extraídas (será adicionado ao jniLibs via symlink? Não, vamos extrair diretamente)
         val jreDir = File(context.filesDir, "jre")
-        if (jreDir.exists() && File(jreDir, "lib/libjvm.so").exists()) {
+        // Se já existir libjvm.so, retorna o caminho
+        if (jreDir.exists() && jreDir.walkTopDown().any { it.isFile && it.name == "libjvm.so" }) {
             return@withContext jreDir.absolutePath
         }
 
         val client = OkHttpClient.Builder()
             .followRedirects(true)
             .build()
-        // Baixa a JRE mínima para aarch64 (exemplo usando Adoptium, procure um endpoint de JRE)
-        // Usaremos a API do Adoptium para JRE
+        // Endpoint da JRE do Adoptium para aarch64 Linux
         val apiUrl = "https://api.adoptium.net/v3/binary/latest/17/ga/linux/aarch64/jre/hotspot/normal/eclipse?project=jdk"
         val request = Request.Builder().url(apiUrl).build()
         val response = client.newCall(request).execute()
@@ -51,7 +50,8 @@ object JavaInstaller {
             }
         }
 
-        // Extrai para jreDir, preservando a estrutura (ex.: jdk-17.0.19+10-jre/)
+        // Limpa e extrai
+        jreDir.deleteRecursively()
         jreDir.mkdirs()
         tempFile.inputStream().use { fileStream ->
             GZIPInputStream(fileStream).use { gzStream ->
@@ -74,7 +74,7 @@ object JavaInstaller {
         }
         tempFile.delete()
 
-        // Encontrar o diretório raiz da JRE extraída (pode ter subdiretório)
+        // Procura o diretório raiz da JRE (onde está lib/libjvm.so)
         val jreRoot = jreDir.walkTopDown().firstOrNull { it.isDirectory && File(it, "lib/libjvm.so").exists() }
         jreRoot?.absolutePath
     }

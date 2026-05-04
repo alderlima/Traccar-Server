@@ -1,9 +1,6 @@
 package com.forma2.app.ui.screen
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -16,10 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.forma2.app.viewmodel.MainViewModel
@@ -28,13 +23,6 @@ import com.forma2.app.viewmodel.MainViewModel
 @Composable
 fun HomeScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) viewModel.startProcess()
-    }
 
     val dirPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -114,7 +102,7 @@ fun HomeScreen(viewModel: MainViewModel) {
             if (uiState.jarFiles.isNotEmpty()) {
                 Text(
                     "Arquivos .jar encontrados:",
-                    style = MaterialTheme.typography.titleMedium, // CORRIGIDO
+                    style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 LazyColumn(
@@ -171,19 +159,7 @@ fun HomeScreen(viewModel: MainViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                                == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                viewModel.startProcess()
-                            } else {
-                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        } else {
-                            viewModel.startProcess()
-                        }
-                    },
+                    onClick = { viewModel.startProcess() },
                     enabled = !uiState.processRunning && uiState.selectedJarPath.isNotEmpty() && uiState.jdkInstalled,
                     modifier = Modifier.weight(1f)
                 ) {

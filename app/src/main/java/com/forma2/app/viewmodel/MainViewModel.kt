@@ -48,7 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val dirUri = if (dirUriStr.isNotEmpty()) Uri.parse(dirUriStr) else null
             _uiState.update {
                 it.copy(
-                    jdkInstalled = jdkPath.isNotEmpty() && File(jdkPath).exists(),
+                    jdkInstalled = jdkPath.isNotEmpty() && File(jdkPath, "lib/libjvm.so").exists(),
                     jdkPath = jdkPath,
                     selectedDirectoryUri = dirUri
                 )
@@ -80,9 +80,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (_uiState.value.installing) return@launch
             _uiState.update { it.copy(installing = true, installProgress = 0f) }
             try {
-                val jdkPath = JavaInstaller.downloadAndExtract(
+                val jdkPath = JavaInstaller.downloadAndExtractJre(
                     context = getApplication(),
-                    onProgress = { progress ->
+                    onProgress = { progress: Float ->
                         _uiState.update { it.copy(installProgress = progress) }
                     }
                 )
@@ -159,20 +159,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         if (state.processRunning) return
         val jarPath = state.selectedJarPath
-        val jdkPath = state.jdkPath // que agora é o caminho da JRE
+        val jdkPath = state.jdkPath
         if (jarPath.isNotEmpty() && jdkPath.isNotEmpty()) {
             val workingDir = File(jarPath).parent ?: getApplication<Application>().filesDir.absolutePath
-            JavaProcessService.start(
-                context = getApplication(),
-                jarPath = jarPath,
-                workingDir = workingDir,
-                javaHome = jdkPath
-            )
+            JavaProcessService.start(jarPath = jarPath, workingDir = workingDir, javaHome = jdkPath)
         }
     }
 
     fun stopProcess() {
-        JavaProcessService.stop(getApplication())
+        JavaProcessService.stop()
     }
 
     fun clearLogs() {
