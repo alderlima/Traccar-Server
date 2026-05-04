@@ -33,14 +33,13 @@ object JavaProcessService {
                     ldLib
                 }
 
-                // Construir o processo com variáveis de ambiente personalizadas
                 val builder = ProcessBuilder(*command)
                 builder.directory(File(workingDir))
                 builder.environment().putAll(env)
                 builder.redirectErrorStream(true)
 
                 currentProcess = builder.start()
-                LogManager.appendLog("PID: ${currentProcess?.pid()}")
+                LogManager.appendLog("Processo Java iniciado.")
 
                 val reader = currentProcess!!.inputStream.bufferedReader()
                 reader.useLines { lines ->
