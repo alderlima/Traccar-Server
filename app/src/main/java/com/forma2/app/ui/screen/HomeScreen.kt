@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.forma2.app.viewmodel.MainViewModel
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,14 +191,19 @@ fun HomeScreen(viewModel: MainViewModel) {
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                Text(
-                    text = uiState.logs.ifEmpty { "Nenhum log..." },
-                    fontFamily = FontFamily.Monospace,
+                val scrollState = rememberScrollState()
+                Box(
                     modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
                         .padding(8.dp)
-                        .fillMaxSize(),
-                    style = MaterialTheme.typography.bodySmall
-                )
+                ) {
+                    Text(
+                        text = uiState.logs.ifEmpty { "Nenhum log..." },
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     }
