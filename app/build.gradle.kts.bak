@@ -13,6 +13,20 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        // Ajustado para suportar as duas ABIs do seu comando terminal
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+    }
+
+    // LOCAL CORRETO: Fora do defaultConfig
+    externalNativeBuild {
+        cmake {
+            // Sintaxe correta para Kotlin DSL no Gradle 8.5
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1" // Opcional: especifique a versão do CMake instalada
+        }
     }
 
     buildTypes {
@@ -42,6 +56,15 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
         }
     }
 }
