@@ -13,15 +13,17 @@ import java.util.concurrent.TimeUnit
 
 object JavaInstaller {
 
+    // Lista de mirrors oficiais do Termux
     private val MIRRORS = listOf(
         "https://packages.termux.dev/apt/termux-main/pool/main/o",
+        "https://mirror.mwt.me/termux/main/pool/main/o",
         "https://mirrors.cqupt.edu.cn/termux/apt/termux-main/pool/main/o",
-        "https://termux.mirror.gnu.net/termux-main/pool/main/o",
-        "https://mirror.fcix.net/termux/apt/termux-main/pool/main/o"
+        "https://mirrors.aliyun.com/termux/termux-main/pool/main/o"
     )
 
+    // Nomes dos pacotes na versão atual (17.0.19)
     private const val JDK_DEB = "openjdk-17_17.0.19_aarch64.deb"
-    private const val JDK_X_DEB = "openjdk-17-x_17.0-.19_aarch64.deb"
+    private const val JDK_X_DEB = "openjdk-17-x_17.0.19_aarch64.deb"
 
     suspend fun downloadAndExtractJre(
         context: Context,
@@ -45,7 +47,7 @@ object JavaInstaller {
         val xDeb = downloadFileWithFallback(client, JDK_X_DEB, context)
         onProgress(0.6f)
 
-        // Verifica integridade básica
+        // Verifica se os arquivos não estão vazios
         if (mainDeb.length() == 0L || xDeb.length() == 0L) {
             throw IOException("Download do JDK falhou: arquivo vazio.")
         }
@@ -61,8 +63,8 @@ object JavaInstaller {
             tempDir.deleteRecursively()
             throw IOException("Falha na extração dos pacotes .deb: ${e.message}", e)
         } finally {
-            // Mantém os arquivos para inspeção em caso de erro (pode comentar se quiser)
-            // mainDeb.delete(); xDeb.delete()
+            mainDeb.delete()
+            xDeb.delete()
         }
 
         // Localiza a raiz do JDK dentro da estrutura extraída
@@ -80,11 +82,10 @@ object JavaInstaller {
         extractedJavaHome.copyRecursively(jdkDir, overwrite = true)
         tempDir.deleteRecursively()
 
-        // Binários executáveis
+        // Torna binários executáveis
         jdkDir.walkTopDown().filter { it.isFile && (it.name == "java" || it.name == "keytool") }.forEach {
             makeExecutable(it)
         }
-
         setupWrapper(jdkDir)
 
         onProgress(1f)
@@ -98,14 +99,18 @@ object JavaInstaller {
     ): File {
         for (baseUrl in MIRRORS) {
             val url = "$baseUrl/openjdk-17/$fileName"
+            // Para o pacote -x, ajusta a URL
+            val finalUrl = if (fileName.contains("-x")) {
+                "$baseUrl/openjdk-17-x/$fileName"
+            } else {
+                url
+            }
             try {
-                return downloadFile(client, url, context)
+                return downloadFile(client, finalUrl, context)
             } catch (e: IOException) {
-                // Tenta o próximo mirror
-                continue
+                continue // tenta o próximo mirror
             }
         }
-        // Se tentar também o pacote openjdk-17-x? Não, o X é arquivo separado.
         throw IOException("Todos os mirrors falharam para $fileName")
     }
 
@@ -124,7 +129,6 @@ object JavaInstaller {
                 input.copyTo(fos)
             }
         }
-        // Verifica se o arquivo foi completamente baixado (opcional)
         val contentLength = body.contentLength()
         if (contentLength > 0 && file.length() != contentLength) {
             file.delete()
