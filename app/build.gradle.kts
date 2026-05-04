@@ -17,10 +17,9 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-
         externalNativeBuild {
             cmake {
-                path("src/main/cpp/CMakeLists.txt")
+                path = "src/main/cpp/CMakeLists.txt"
             }
         }
     }
