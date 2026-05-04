@@ -17,9 +17,10 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
         externalNativeBuild {
             cmake {
-                path = "src/main/cpp/CMakeLists.txt"
+                path("src/main/cpp/CMakeLists.txt")
             }
         }
     }
@@ -57,7 +58,6 @@ android {
         }
     }
 
-    // Diretório onde as libs nativas extraídas serão colocadas (se necessário)
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
