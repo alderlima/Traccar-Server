@@ -13,9 +13,9 @@ import java.io.FileOutputStream
 
 object JavaInstaller {
 
-    private const val BASE_URL = "https://packages.termux.dev/apt/termux-main/pool/main/o/openjdk-17"
-    private const val JDK_DEB = "openjdk-17_17.0-31_aarch64.deb"
-    private const val JDK_X_DEB = "openjdk-17-x_17.0-31_aarch64.deb"
+    private const val BASE_URL = "https://packages.termux.dev/apt/termux-main/pool/main/o"
+    private const val JDK_DEB = "openjdk-17_17.0.19_aarch64.deb"
+    private const val JDK_X_DEB = "openjdk-17-x_17.0.19_aarch64.deb"
 
     suspend fun downloadAndExtractJre(
         context: Context,
