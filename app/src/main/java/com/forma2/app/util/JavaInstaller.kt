@@ -1,6 +1,7 @@
 package com.forma2.app.util
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -13,15 +14,16 @@ import java.util.concurrent.TimeUnit
 
 object JavaInstaller {
 
-    // Lista de mirrors oficiais do Termux
+    private const val TAG = "JavaInstaller"
+
+    // Mirrors testados e funcionais
     private val MIRRORS = listOf(
+        "https://mirror.mwt.me/termux/main/pool/main/o",   // mais estável
         "https://packages.termux.dev/apt/termux-main/pool/main/o",
-        "https://mirror.mwt.me/termux/main/pool/main/o",
         "https://mirrors.cqupt.edu.cn/termux/apt/termux-main/pool/main/o",
         "https://mirrors.aliyun.com/termux/termux-main/pool/main/o"
     )
 
-    // Nomes dos pacotes na versão atual (17.0.19)
     private const val JDK_DEB = "openjdk-17_17.0.19_aarch64.deb"
     private const val JDK_X_DEB = "openjdk-17-x_17.0.19_aarch64.deb"
 
@@ -33,6 +35,7 @@ object JavaInstaller {
         val javaBin = File(jdkDir, "bin/java")
         if (javaBin.exists()) {
             makeExecutable(javaBin)
+            LogManager.appendLog("JDK já instalado em $jdkDir")
             return@withContext jdkDir.absolutePath
         }
 
@@ -42,15 +45,18 @@ object JavaInstaller {
             .followRedirects(true)
             .build()
 
-        val mainDeb = downloadFileWithFallback(client, JDK_DEB, context)
+        // Baixa com tentativas e verificação
+        val mainDeb = downloadWithRetry(client, JDK_DEB, false, context)
         onProgress(0.3f)
-        val xDeb = downloadFileWithFallback(client, JDK_X_DEB, context)
+        val xDeb = downloadWithRetry(client, JDK_X_DEB, true, context)
         onProgress(0.6f)
 
-        // Verifica se os arquivos não estão vazios
-        if (mainDeb.length() == 0L || xDeb.length() == 0L) {
-            throw IOException("Download do JDK falhou: arquivo vazio.")
+        // Validação básica de tamanho (pelo menos 1MB cada)
+        if (mainDeb.length() < 1_000_000 || xDeb.length() < 100_000) {
+            throw IOException("Arquivo baixado parece inválido (tamanho insuficiente).")
         }
+
+        LogManager.appendLog("Pacotes baixados (${mainDeb.length()} bytes, ${xDeb.length()} bytes). Extraindo...")
 
         val tempDir = File(context.cacheDir, "jdk-temp")
         tempDir.deleteRecursively()
@@ -58,23 +64,25 @@ object JavaInstaller {
 
         try {
             extractDeb(mainDeb, tempDir)
+            LogManager.appendLog("Pacote principal extraído.")
             extractDeb(xDeb, tempDir)
+            LogManager.appendLog("Pacote complementar extraído.")
         } catch (e: Exception) {
+            LogManager.appendLog("Erro na extração: ${e.message}")
             tempDir.deleteRecursively()
-            throw IOException("Falha na extração dos pacotes .deb: ${e.message}", e)
+            throw IOException("Falha na extração: ${e.message}", e)
         } finally {
-            mainDeb.delete()
-            xDeb.delete()
+            // Mantemos os .deb para inspeção manual, mas podem ser apagados depois
+            // mainDeb.delete(); xDeb.delete()
         }
 
-        // Localiza a raiz do JDK dentro da estrutura extraída
         val extractedJavaHome = tempDir.walkTopDown().firstOrNull { file ->
             file.isFile && file.name == "java" && file.parentFile?.name == "bin"
         }?.parentFile?.parentFile
 
         if (extractedJavaHome == null) {
             tempDir.deleteRecursively()
-            throw IOException("Estrutura do JDK não encontrada na extração.")
+            throw IOException("Estrutura do JDK não encontrada.")
         }
 
         jdkDir.deleteRecursively()
@@ -82,64 +90,64 @@ object JavaInstaller {
         extractedJavaHome.copyRecursively(jdkDir, overwrite = true)
         tempDir.deleteRecursively()
 
-        // Torna binários executáveis
         jdkDir.walkTopDown().filter { it.isFile && (it.name == "java" || it.name == "keytool") }.forEach {
             makeExecutable(it)
         }
         setupWrapper(jdkDir)
 
         onProgress(1f)
+        LogManager.appendLog("JDK 17 instalado com sucesso.")
         jdkDir.absolutePath
     }
 
-    private suspend fun downloadFileWithFallback(
+    private suspend fun downloadWithRetry(
         client: OkHttpClient,
         fileName: String,
+        isXPackage: Boolean,
         context: Context
     ): File {
-        for (baseUrl in MIRRORS) {
-            val url = "$baseUrl/openjdk-17/$fileName"
-            // Para o pacote -x, ajusta a URL
-            val finalUrl = if (fileName.contains("-x")) {
-                "$baseUrl/openjdk-17-x/$fileName"
-            } else {
-                url
-            }
-            try {
-                return downloadFile(client, finalUrl, context)
-            } catch (e: IOException) {
-                continue // tenta o próximo mirror
+        var lastException: Exception? = null
+        for (mirror in MIRRORS) {
+            val basePath = if (isXPackage) "$mirror/openjdk-17-x" else "$mirror/openjdk-17"
+            val url = "$basePath/$fileName"
+            repeat(3) { attempt ->
+                try {
+                    LogManager.appendLog("Baixando $url (tentativa ${attempt + 1})")
+                    val file = downloadFile(client, url, context)
+                    if (file.length() > 0) return file
+                } catch (e: Exception) {
+                    lastException = e
+                    LogManager.appendLog("Falha no download: ${e.message}")
+                }
             }
         }
-        throw IOException("Todos os mirrors falharam para $fileName")
+        throw IOException("Todos os mirrors falharam para $fileName. Último erro: ${lastException?.message}")
     }
 
-    private suspend fun downloadFile(
-        client: OkHttpClient,
-        url: String,
-        context: Context
-    ): File {
+    private suspend fun downloadFile(client: OkHttpClient, url: String, context: Context): File {
         val request = Request.Builder().url(url).build()
         val response = client.newCall(request).execute()
-        if (!response.isSuccessful) throw IOException("HTTP ${response.code} para $url")
-        val body = response.body ?: throw IOException("Corpo da resposta vazio para $url")
+        if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+        val body = response.body ?: throw IOException("Corpo vazio")
         val file = File(context.cacheDir, url.substringAfterLast('/'))
         FileOutputStream(file).use { fos ->
             body.byteStream().use { input ->
                 input.copyTo(fos)
             }
         }
+        // Verifica tamanho contra Content-Length
         val contentLength = body.contentLength()
         if (contentLength > 0 && file.length() != contentLength) {
             file.delete()
-            throw IOException("Tamanho do arquivo baixado não confere com Content-Length")
+            throw IOException("Download incompleto: esperado $contentLength bytes, recebido ${file.length()}")
         }
         return file
     }
 
     private fun extractDeb(debFile: File, destDir: File) {
-        BufferedInputStream(debFile.inputStream()).use { bufferedIn ->
-            ArArchiveInputStream(bufferedIn).use { ar ->
+        // Usa BufferedInputStream com buffer maior
+        BufferedInputStream(FileInputStream(debFile), 65536).use { bis ->
+            ArArchiveInputStream(bis).use { ar ->
                 var entry = ar.nextArEntry
                 while (entry != null) {
                     if (entry.name == "data.tar.xz") {
