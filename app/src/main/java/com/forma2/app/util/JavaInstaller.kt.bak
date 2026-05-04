@@ -48,14 +48,10 @@ object JavaInstaller {
         mainDeb.delete()
         xDeb.delete()
 
-        // Encontra a subpasta que contém "bin/java" (deve estar dentro de data/data/com.termux/...)
-        var extractedJavaHome: File? = null
-        tempDir.walkTopDown().forEach { file ->
-            if (file.isFile && file.name == "java" && file.parentFile?.name == "bin") {
-                extractedJavaHome = file.parentFile!!.parentFile!! // diretório raiz do JDK
-                return@forEach
-            }
-        }
+        // Encontra a subpasta que contém "bin/java"
+        val extractedJavaHome: File? = tempDir.walkTopDown().firstOrNull { file ->
+            file.isFile && file.name == "java" && file.parentFile?.name == "bin"
+        }?.parentFile?.parentFile  // sobe para o diretório raiz do JDK
 
         if (extractedJavaHome == null) {
             tempDir.deleteRecursively()
