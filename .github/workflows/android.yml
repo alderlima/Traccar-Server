@@ -26,8 +26,32 @@ jobs:
     - name: Build ARM Debug APK
       run: ./gradlew :app:assembleDebug -Pandroid.injected.abi.list=armeabi-v7a,arm64-v8a
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4 # Atualizado para v4
-      with:
-        name: traccar-server-arm-debug
-        path: app/build/outputs/apk/debug/*.apk
+      - name: Generate keystore
+        run: |
+          mkdir -p android/app
+          keytool -genkeypair \
+            -alias testkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -keystore android/app/test.keystore \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Test,O=Test,C=BR"
+
+      - name: Create key.properties
+        run: |
+          echo "storePassword=android" > android/key.properties
+          echo "keyPassword=android" >> android/key.properties
+          echo "keyAlias=testkey" >> android/key.properties
+          echo "storeFile=test.keystore" >> android/key.properties
+
+      - name: Build APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-arm64
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
