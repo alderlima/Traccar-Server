@@ -173,4 +173,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearLogs() {
         LogManager.clearLogs()
     }
+    
+    fun loadCrashLog(log: String) {
+        LogManager.appendLog("--- Último Crash ---")
+        LogManager.appendLog(log)
+    }
 }

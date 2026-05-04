@@ -21,8 +21,7 @@ object JavaInstaller {
         context: Context,
         onProgress: (Float) -> Unit
     ): String? = withContext(Dispatchers.IO) {
-        // Usa a pasta de libs nativas, que sempre permite execução
-        val jdkDir = File(context.applicationInfo.nativeLibraryDir, "jdk-17")
+        val jdkDir = File(context.filesDir, "jdk-17")
         val javaBin = File(jdkDir, "bin/java")
         if (javaBin.exists()) {
             makeExecutable(javaBin)
@@ -33,7 +32,7 @@ object JavaInstaller {
 
         val mainDeb = downloadFile(client, "$BASE_URL/openjdk-17/$JDK_DEB", context)
         val xDeb = downloadFile(client, "$BASE_URL/openjdk-17-x/$JDK_X_DEB", context)
-        onProgress(0.5f)
+        onProgress(0.5f) // primeira metade concluída
 
         jdkDir.deleteRecursively()
         jdkDir.mkdirs()
@@ -48,7 +47,7 @@ object JavaInstaller {
         jdkDir.walkTopDown().filter { it.isFile && (it.name == "java" || it.name == "keytool") }.forEach {
             makeExecutable(it)
         }
-        // Wrapper com LD_PRELOAD
+        // Criar wrapper que carrega libandroid-shmem.so
         setupWrapper(jdkDir)
 
         onProgress(1f)
